@@ -32,14 +32,21 @@ const ICONS = {
   records:"M6.4 3.6h7.4l4.2 4.2v12.6H6.4V3.6Z M13.4 3.8v4.2h4.2 M9 12.4h6 M9 16h4",
   tree:"M4.5 6h5 M4.5 12h5 M4.5 18h5 M12.5 6h7 M12.5 12h7 M12.5 18h7",
   graph:"M7 7.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Z M17.6 10.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Z M9.4 21.4a2.4 2.4 0 1 0 0-4.8 2.4 2.4 0 0 0 0 4.8Z M8.6 6.4l7.6 2.6 M15.8 11.4l-5.6 5.2",
-  bell:"M6 8.5a6 6 0 0 1 12 0c0 6.5 2.6 8.5 2.6 8.5H3.4S6 15 6 8.5Z M10.3 20.5a1.94 1.94 0 0 0 3.4 0"
+  bell:"M6 8.5a6 6 0 0 1 12 0c0 6.5 2.6 8.5 2.6 8.5H3.4S6 15 6 8.5Z M10.3 20.5a1.94 1.94 0 0 0 3.4 0",
+  navWorkshop:"M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76Z",
+  navStock:"M14 17.5V6.5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a1 1 0 0 0 1 1h1.5 M14.5 17.5h-5 M19.5 17.5H21a1 1 0 0 0 1-1v-3.6a1 1 0 0 0-.2-.6l-3.5-4.4A1 1 0 0 0 17.5 7.5H14 M19 17.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M9 17.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
+  navSales:"M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4Z M7.5 7.5h.01",
+  navCvrt:"M9 3.5h6v3H9z M15 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2 M9 14l2 2 4-4",
+  navFinance:"M17.5 6.5A7 7 0 1 0 17.5 17.5 M4 10h10 M4 14h10"
 };
 
 /* Ontology stays first and is never removed (PulseLogic enforces this too). */
 const REC_SECTIONS = [
   {id:"ontology", label:"Ontology", blurb:"How every record connects: entities, predicates and the paths between them."},
   {id:"files", label:"Files", blurb:"Documents, contracts and certificates — indexed where Helios can read them."},
-  {id:"contacts", label:"Contacts", blurb:"Every person the business deals with, staff and external."}
+  {id:"contacts", label:"Contacts", blurb:"Every person the business deals with, staff and external."},
+  {id:"companies", label:"Companies", blurb:"Customers and suppliers, with their vehicles, work and permitted commercial information."},
+  {id:"vehicles", label:"Vehicles", blurb:"One canonical record per physical vehicle — dealership stock and customer-owned."}
 ];
 
 const CONTACTS = [
@@ -101,28 +108,28 @@ const FILE_TREE = [
 ];
 
 const ONTO_NODES = [
-  ["Organisation","entity",500,300,1,"Customers and suppliers. Balances arrive from the ledger through the record spine."],
-  ["Person","entity",300,190,1,"One entity for staff and external contacts, scoped by role rather than split in two."],
-  ["Location","entity",700,190,1,"Multi-branch as a business concept: locations plus the location permission scope."],
-  ["Team","entity",250,430,1,"Teams are records, so the team scope on a grant resolves against them."],
-  ["Task","entity",690,430,1,"Work, whatever it is attached to. Queues are one permission-filtered query."],
-  ["Approval","entity",850,320,0,"A request and its steps. Each decision is written as the person who made it."],
-  ["Invoice","ledger",390,95,0,"Read through the spine — the wholesale ledger stays the source of truth."],
-  ["Order","ledger",620,95,0,"Purchase and sales orders, linked to the organisation that raised them."],
-  ["Visit","module",860,470,0,"Contributed by site-visits, with its own table, predicate and tools."],
-  ["File","entity",140,300,0,"Documents against any record. Indexed pages are what Helios can read."],
-  ["works at","predicate",395,240,0,"Person → Organisation."],
-  ["located at","predicate",605,240,0,"Organisation → Location."],
-  ["member of","predicate",360,370,0,"Person → Team."],
-  ["relates to","predicate",600,370,0,"Task → anything."],
-  ["attached to","predicate",140,372,0,"File → anything."]
+  ["Vehicle","entity",500,300,1,"One canonical record per physical vehicle — dealership stock or customer-owned. Answers “what's the story with this vehicle?”"],
+  ["Company","entity",300,190,1,"Customers and suppliers. Customer names are fictional demo companies."],
+  ["Job","entity",700,190,1,"Workshop jobs: complaint, approved budget, status and the technician assigned."],
+  ["Quote","entity",250,430,1,"Deal workings and versions. Discount approvals bind to the version reviewed."],
+  ["CVRT booking","entity",690,430,1,"Test bookings and results. Outcomes are recorded and reviewed by people, never by an agent."],
+  ["Technician","entity",850,320,0,"People who clock time to jobs. Attendance is a separate source (Bizimply sample)."],
+  ["Handover","entity",390,95,0,"Independent release gates: parts, repair, test, documents and accounts clearance."],
+  ["Document","entity",620,95,0,"Spec sheets, job cards and quote packs — VIN-specific kept distinct from generic model sheets."],
+  ["Time entry","ledger",860,470,0,"Clock-on/off intervals from the sample AssetMinder export. Raw events are never changed."],
+  ["Invoice snapshot","ledger",140,300,0,"Invoice-ready values and imported balances. Read only — nothing is posted from Pulse."],
+  ["owned by","predicate",395,240,0,"Vehicle → Company."],
+  ["worked on in","predicate",605,240,0,"Vehicle → Job → Technician / Time entry."],
+  ["quoted on","predicate",360,370,0,"Vehicle → Quote → Approval / Handover."],
+  ["tested in","predicate",600,370,0,"Vehicle → CVRT booking → Result → Repair job."],
+  ["billed as","predicate",140,372,0,"Job → Invoice snapshot."]
 ];
 
 const ONTO_EDGES = [
   [500,300,300,190],[500,300,700,190],[500,300,250,430],[500,300,690,430],
-  [500,300,850,320],[500,300,390,95],[500,300,620,95],[500,300,140,300],
-  [300,190,250,430],[700,190,860,470],[690,430,850,320],[690,430,860,470],
-  [300,190,140,300],[390,95,620,95]
+  [500,300,390,95],[500,300,620,95],[700,190,850,320],[850,320,860,470],
+  [690,430,700,190],[300,190,250,430],[620,95,700,190],[250,430,390,95],
+  [700,190,140,300],[390,95,620,95]
 ];
 
 const REC_TEMPLATES = [
@@ -463,7 +470,12 @@ const STREAM_DEFS = [
 const NAV = [
   {label:"Home", icon:"helios", page:"Home"},
   {label:"Agents", icon:"navAgents", page:"Agents"},
-  {label:"Dashboard", icon:"navDash", page:"Dashboard", dot:true},
+  {label:"Workshop", icon:"navWorkshop", page:"Workshop", dot:true},
+  {label:"Vehicle Stock", icon:"navStock", page:"Stock"},
+  {label:"Sales", icon:"navSales", page:"Sales"},
+  {label:"CVRT", icon:"navCvrt", page:"CVRT"},
+  {label:"Finance", icon:"navFinance", page:"Finance"},
+  {label:"Dashboard", icon:"navDash", page:"Dashboard"},
   {label:"Work", icon:"navWork", page:"Work"},
   {label:"Records", icon:"navRecords", page:"Records"},
   {label:"Activity", icon:"pulseLine", page:"Activity", dot:true}
@@ -475,64 +487,71 @@ const ITEMS = {
     title:"V008 handover blocked — failed CVRT",
     why:"A reserved used van for Midlands Parcel Services failed its test. Repair, retest and accounts clearance are still open.",
     detail:"CVRT failed on rear brake imbalance. Repair JOB-1046 is waiting on a rear caliper (sample ETA 11:30). A repair finishing does not pass the test — the retest is a separate, reviewed outcome. Each release gate has a named owner.",
-    actionLabel:"Open V008", secondaryLabel:"View gates", group:"Alerts",
+    actionLabel:"Open V008", secondaryLabel:"View gates", group:"Alerts", target:["Sales","handovers","vehicle","V008"],
     fields:[{k:"Provider",v:"handover.gates"},{k:"Vehicle",v:"V008"},{k:"Repair",v:"JOB-1046"},{k:"Customer",v:"Midlands Parcel Services"}],
     history:[{when:"Today 09:30",text:"CVRT recorded a fail"},{when:"Today 09:35",text:"Repair JOB-1046 opened, part on order"}]},
   gaps:{kind:"Alert", importance:"high", icon:ICONS.autos, age:"35m",
     title:"Two technicians present but unallocated",
     why:"Seán Doyle has had no job clocking since 09:25, Rachel Byrne since 09:42. Both are present, neither is on an approved break.",
     detail:"The live board surfaces this while the day is still recoverable. Reviewing opens the underlying clock evidence and a reason editor; it does not change the raw clocking.",
-    actionLabel:"Open Live Board", secondaryLabel:"Record a reason", group:"Alerts",
+    actionLabel:"Open Live Board", secondaryLabel:"Record a reason", group:"Alerts", target:["Workshop","live"],
     fields:[{k:"Provider",v:"workshop.liveboard"},{k:"Seán Doyle",v:"idle 35 min"},{k:"Rachel Byrne",v:"idle 18 min"},{k:"Source",v:"Sample AssetMinder export"}],
     history:[{when:"Today 09:25",text:"Seán clocked off his last job"},{when:"Today 09:42",text:"Rachel clocked off her last job"}]},
   billy:{kind:"Alert", importance:"high", icon:ICONS.work, age:"10m",
     title:"Billy's JOB-1042 at 105 of 120 minutes",
     why:"Galway Haulage brake investigation is at 87.5% of its approved time budget. Warning fires at 85% consumed.",
     detail:"This is elapsed time against budget, not physical completion. Next up is JOB-1043 for Mayo Logistics at 10:15. You can review the budget or move the next job, with a reason.",
-    actionLabel:"Open Live Board", secondaryLabel:"Move next job", group:"Alerts",
+    actionLabel:"Open Live Board", secondaryLabel:"Move next job", group:"Alerts", target:["Workshop","live"],
     fields:[{k:"Provider",v:"workshop.watchdog"},{k:"Job",v:"JOB-1042"},{k:"Consumed",v:"105 / 120 min"},{k:"Next",v:"JOB-1043 · 10:15"}],
     history:[{when:"Today 08:15",text:"Billy clocked on"},{when:"Today 10:00",text:"Ops Watchdog flagged 85% of budget"}]},
   writeups:{kind:"Task", importance:"high", icon:ICONS.approvals, age:"2h",
     title:"3 completed jobs await write-up review",
     why:"€1,730 net is ready to invoice once the technician confirms the work and the service manager approves.",
     detail:"JOB-1041 (€780) is the one to start on — oil and filter plus a front-pad inspection are supported by the notes; pads and wipers are not. Unconfirmed items are shown as questions, not customer narrative.",
-    actionLabel:"Open Job Cards", secondaryLabel:"Open Approvals", group:"Work",
+    actionLabel:"Open Job Cards", secondaryLabel:"Open Approvals", group:"Work", target:["Workshop","jobcards"],
     fields:[{k:"Provider",v:"workshop.jobcards"},{k:"Blocked",v:"€1,730 · 3 jobs"},{k:"Ready",v:"€2,110 · 3 jobs"},{k:"Start with",v:"JOB-1041"}],
     history:[{when:"Today 09:10",text:"Job Card Assistant prepared the JOB-1041 draft"},{when:"Today 09:12",text:"Flagged for technician confirmation"}]},
   discount:{kind:"Approval", importance:"high", icon:ICONS.approvals, age:"1h",
     title:"Q-1042 — €500 discount needs your approval",
     why:"Raised by Jack Kelly for Westway Electrical. The €500 discount is above the €250 demo threshold, so it routed to you.",
     detail:"Quote is €34,000 net on V024. Missing approved specification and this pending discount both stop it reaching Ready for customer. The customer pack previews with a draft watermark until then.",
-    actionLabel:"Review Q-1042", secondaryLabel:"Request changes", group:"Approvals",
+    actionLabel:"Review Q-1042", secondaryLabel:"Request changes", group:"Approvals", target:["Sales","quote"],
     fields:[{k:"Provider",v:"sales.approvals"},{k:"Requested by",v:"Jack Kelly"},{k:"Quote",v:"Q-1042 · €34,000"},{k:"Discount",v:"€500"}],
     history:[{when:"Today 08:50",text:"Jack Kelly raised the quote"},{when:"Today 08:50",text:"Routed to Anthony Reynolds — over threshold"}]}
 };
-const ORDER = ["v008","gaps","billy","writeups","discount"];
+ITEMS.cvrtok = {kind:"Update", importance:"normal", icon:ICONS.navCvrt, age:"1h",
+    title:"Two CVRT tests passed this morning",
+    why:"Galway Haulage and Shannon Cold Chain vehicles passed first time.",
+    detail:"Results were recorded and reviewed by the CVRT team. Ten bookings remain today, including the Mayo Logistics retest at 11:00.",
+    actionLabel:"Open CVRT", secondaryLabel:"Results", group:"Work", target:["CVRT","overview"],
+    fields:[{k:"Provider",v:"cvrt.results"},{k:"Passed",v:"T-301, T-302"},{k:"Remaining",v:"10 bookings"},{k:"Source",v:"Recorded by people"}],
+    history:[{when:"Today 08:30",text:"T-301 passed"},{when:"Today 09:00",text:"T-302 passed"}]};
+const ORDER = ["v008","gaps","billy","writeups","discount","cvrtok"];
 
 const ANSWERS = {
   workshop:{tool:"workshop_clocking", effect:"read",
     text:"Friday had 13.0 unallocated workshop hours — a €1,040 billing equivalent at the demo €80/hour rate, not confirmed lost revenue. Today two technicians are present but unallocated (Seán since 09:25, Rachel since 09:42), and Billy's Galway Haulage job has used 105 of 120 minutes.",
     cols:["Bucket","Hours","Share"],
     rows:[["Job-allocated","94.0","78%"],["Approved breaks","7.5","6%"],["Internal work","5.5","5%"],["Unallocated — review","13.0","11%"]],
-    actions:[["Open Workshop → Clocking",0],["Open the two live gaps",0]]},
+    actions:[["Open Workshop → Clocking",1,["Workshop","clocking"]],["Open the live gaps",0,["Workshop","live"]]]},
   v008:{tool:"vehicle_timeline", effect:"read",
     text:"V008 is a reserved used Master van for Midlands Parcel Services. Its CVRT failed on rear brake imbalance, so repair JOB-1046 is open and waiting on a rear caliper with a sample ETA of 11:30. Handover is blocked: the repair, the retest and accounts clearance are each separate gates. A repair finishing does not pass the test.",
     cols:["Gate","Owner","State"],
     rows:[["Parts (caliper)","Darren O'Brien","ETA 11:30"],["Repair readiness","Jonathan Keenan","blocked"],["Retest","Elizabeth Reynolds","after repair"],["Accounts clearance","Caroline Glynn","pending"]],
-    actions:[["Open V008 record",0],["Open the repair handover",0]]},
+    actions:[["Open V008 record",1,["Sales","handovers","vehicle","V008"]],["Open the repair handover",0,["CVRT","repairs"]]]},
   meeting:{tool:"morning_meeting", effect:"read",
     text:"Today's meeting reads the same records as the rest of Pulse. Five sections are enabled: Greeting, Events, Readiness, Preview and Photos. Billy's current Galway Haulage job and next Mayo Logistics job come straight from the planner — nothing retyped. Today's absence and the breakdown rota are included.",
     cols:["Section","State"],
     rows:[["Greeting","enabled"],["Events","enabled"],["Readiness","enabled · 3 columns"],["Preview","enabled · 15 technicians"],["Photos","enabled"]],
-    actions:[["Open the morning meeting",0],["Edit sections",0]]},
+    actions:[["Open the morning meeting",1,["Work","meeting"]],["Open the planner",0,["Workshop","planner"]]]},
   quote:{tool:"quote_builder", effect:"read",
     text:"V024 is an incoming Renault Master chassis cab due 20 October with no approved specification sheet yet. Q-1042 for Westway Electrical totals €34,000 net: €32,500 vehicle + €1,250 options + €750 delivery, less a €500 discount. Two gates are open — the €500 discount needs your approval (demo policy above €250) and the specification needs attaching before it can reach Ready for customer.",
     cols:["Line","Amount"],
     rows:[["Vehicle","€32,500"],["Options","€1,250"],["Delivery / prep","€750"],["Discount","−€500"],["Net quote","€34,000"]],
-    actions:[["Open Q-1042",0],["Attach a sample spec to V024",0]]},
+    actions:[["Open Q-1042",1,["Sales","quote"]],["Attach a sample spec to V024",0,["Stock","specs"]]]},
   fallback:{tool:"pulse_search", effect:"read",
     text:"This is a demo preview with sample responses. I answer from the seeded Reynolds records — workshop jobs, vehicle stock, sales, CVRT, parts and finance — and link to the exact record. Nothing is sent externally, and Keyloop is planned, not connected.",
-    actions:[["Show me today's priorities",0]]}
+    actions:[["Show me today's priorities",1,["Dashboard","executive"]]]}
 };
 
 // Turns a plain-English filter name into a full dashboard area — the "primitive
@@ -921,7 +940,7 @@ const SCHEDULES = [
   {id:"s5", name:"Keyloop migration (planned)", cadence:"From December 2026", next:"Planned", owner:"—", on:false, day:4}
 ];
 
-const WIDGET_DEFS = [["inbox","Action inbox"],["work","My work"],["activity","Activity"],["kpi","Today's numbers"],["visits","Site visits"]];
+const WIDGET_DEFS = [["inbox","Action inbox"],["work","My work"],["activity","Activity"],["kpi","Today's numbers"],["visits","CVRT today"]];
 const WORK_WIDGETS = [
   {id:"queue", label:"My queue", value:"8", hint:"assigned to you", icon:"work", queue:"mine"},
   {id:"late", label:"Running late", value:"11", hint:"past their due date", icon:"health", queue:"overdue"},
@@ -989,13 +1008,13 @@ const FACE_TINTS = [
 
 /* ---- ontology graph: generation, Dijkstra traversal, canvas render ---- */
 const CLUSTERS = [
-  ["Organisations", "#c8f04b", 0.00, 0.62, 46],
+  ["Companies",     "#6C8CFF", 0.00, 0.62, 46],
   ["People",        "#6ad0f0", 0.90, 0.70, 52],
-  ["Files",         "#b06cf0", 1.75, 0.66, 58],
-  ["Tasks",         "#f0c04b", 2.55, 0.72, 44],
+  ["Documents",     "#b06cf0", 1.75, 0.66, 58],
+  ["Jobs",          "#f0c04b", 2.55, 0.72, 44],
   ["Invoices",      "#f0567f", 3.35, 0.60, 38],
-  ["Site visits",   "#5fe0a8", 4.15, 0.70, 40],
-  ["Locations",     "#f0803a", 4.95, 0.64, 30],
+  ["Vehicles",      "#5fe0a8", 4.15, 0.70, 40],
+  ["CVRT tests",    "#f0803a", 4.95, 0.64, 30],
   ["Approvals",     "#5f7cf0", 5.65, 0.72, 34]
 ];
 

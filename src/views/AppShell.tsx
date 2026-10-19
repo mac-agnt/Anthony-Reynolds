@@ -10,7 +10,6 @@ import RecordsFiles from "./pages/RecordsFiles";
 import RecordsOntology from "./pages/RecordsOntology";
 import Activity from "./pages/Activity";
 import Settings from "./pages/Settings";
-import Dashboard from "./pages/Dashboard";
 import Agents from "./pages/Agents";
 import HeliosMini from "./overlays/HeliosMini";
 import WorkViewer from "./overlays/WorkViewer";
@@ -18,6 +17,7 @@ import AgentStudio from "./overlays/AgentStudio";
 import NewRecordDialog from "./overlays/NewRecordDialog";
 import CommandPalette from "./overlays/CommandPalette";
 import BackgroundGallery from "./overlays/BackgroundGallery";
+import DemoRoot, { DemoOverlays } from "../demo/root";
 
 type Props = { v: any };
 
@@ -314,7 +314,7 @@ export default function AppShell({ v }: Props) {
                               {"Anthony Reynolds"}
                             </div>
                             <div style={{"fontSize":"10.5px","color":"var(--faint)","lineHeight":"1.2"}}>
-                              {"Owner"}
+                              {"Operations Manager"}
                             </div>
                           </div>
                         </>
@@ -576,8 +576,8 @@ export default function AppShell({ v }: Props) {
             </>
           )}
           {v.isSettings && <Settings v={v} />}
-          {v.isDashboard && <Dashboard v={v} />}
-          {v.isAgents && <Agents v={v} />}
+          {v.isAgents && !v.demo && <Agents v={v} />}
+          {v.demo && <DemoRoot page={v.demo.page} section={v.demo.section} />}
         </div>
       </main>
       {v.showFab && (
@@ -820,6 +820,8 @@ export default function AppShell({ v }: Props) {
       {v.newRec?.open && <NewRecordDialog v={v} />}
       {v.paletteOpen && <CommandPalette v={v} />}
       {v.bgGallery?.open && <BackgroundGallery v={v} />}
+      <DemoOverlays />
+      <div id="demo-portal" />
       <div title="All data on screen is a fictional demo scenario, frozen at the Monday 19 October 2026, 10:00 snapshot." style={{"position":"fixed","right":"14px","bottom":"12px","zIndex":200,"display":"flex","alignItems":"center","gap":"7px","height":"26px","padding":"0 11px","borderRadius":"999px","background":"var(--surface-2)","border":"1px solid var(--border)","backdropFilter":"blur(18px)","fontFamily":"var(--mono)","fontSize":"9.5px","letterSpacing":"0.14em","color":"var(--dim)","pointerEvents":"auto","boxShadow":"0 6px 18px rgba(0,0,0,.28)"}}>
         <span style={{"width":"5px","height":"5px","borderRadius":"2px","background":"var(--accent)","boxShadow":"0 0 8px var(--accent)"}} />
         {"DEMO · SAMPLE DATA · SNAPSHOT 10:00"}

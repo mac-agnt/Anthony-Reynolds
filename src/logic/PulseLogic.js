@@ -65,6 +65,9 @@ import {
   hexRGB,
   buildGraph
 } from "./data";
+import { setNavigator, setThemeBridge, MODULE_TABS } from "../demo/nav";
+import { subscribe as demoSubscribe, demoClock, inboxOverrides, tabCount, kpiOverrides, liveAnswer } from "../demo/bridge";
+import { A as DemoActions } from "../demo/store";
 
 /* ── Locked layout ──────────────────────────────────────────────────────────
    These two rules hold for every client build, whatever data.js says:
@@ -86,7 +89,20 @@ const NAV = (() => {
 
 /* All state and behaviour for Pulse. renderVals() returns the flat object the views render from. */
 export default class PulseLogic extends DCLogic {
-  state = { w: typeof window === "undefined" ? 1440 : window.innerWidth, theme:"reynolds", page:"Home", draft:"", query:"", thread:[], typed:0, paletteOpen:false, showNotifs:false, palScope:"All", palSel:0, palRecent:["Galway Haulage","V008"],
+  constructor(props){
+    super(props);
+    setNavigator((page, sec) => this.demoGo(page, sec));
+    setThemeBridge(id => this.setState({theme:id}), () => this.state.theme);
+    demoSubscribe(() => { if (this.__host) this.forceUpdate(); });
+  }
+  /* Navigation used by the Reynolds demo modules (src/demo). */
+  demoGo(page, sec){
+    if (page === "Records") { this.go("Records"); if (sec) this.setState({recSection: sec}); return; }
+    this.go(page);
+    if (sec) this.setState(prev => ({sec: Object.assign({}, prev.sec, {[page]: sec})}));
+  }
+  secOf(page){ const tabs = MODULE_TABS[page]; return (this.state.sec && this.state.sec[page]) || (tabs ? tabs[0][0] : ""); }
+  state = { w: typeof window === "undefined" ? 1440 : window.innerWidth, theme:"reynolds", page:"Home", sec:{}, draft:"", query:"", thread:[], typed:0, paletteOpen:false, showNotifs:false, palScope:"All", palSel:0, palRecent:["Galway Haulage","V008"],
             done:{}, resolved:{}, approved:{}, inboxFilter:"All", approvalFilter:"Awaiting you", open:null, range:"30d",
             workDoc:null, workDocTab:"work",
             queue:"mine", recordTab:"Overview", record:"person", hovered:null, hoverLabel:"", hoverHint:"", hoverTop:0,
@@ -97,7 +113,7 @@ export default class PulseLogic extends DCLogic {
             adminOpen:null, adminFlags:{}, adminGroup:null,
             actPaused:false, actHover:null, actKpi:"all", actQuery:"", actOpen:null, actTick:0,
             recSection:"ontology", recAsk:"", treeOpen:true, treeExpanded:{}, treeFile:"fl-1", treeQuery:"",
-            ontoNode:"Organisation", ontoHover:null, ontoLayout:"Force",
+            ontoNode:"Vehicle", ontoHover:null, ontoLayout:"Force",
             newRecOpen:false, newRecName:"", newRecTemplate:"Field sheet", newRecCat:"All",
             opsFilter:"all", opsOff:{}, opsOpen:null, opsScope:"week", opsDay:26, opsOrder:null, opsDrag:null,
             opsBuilderOpen:false, opsBuilderMode:"workflow", builderText:"", builderGenerated:false,
@@ -972,7 +988,8 @@ export default class PulseLogic extends DCLogic {
   // character down and swings the new one up. Results are cached per stamp so
   // repeat renders inside one tick don't cancel a flip mid-air.
   buildFlipUnits(BODY, INK, LIME){
-    const now = new Date();
+    const dc = demoClock();
+    const now = new Date(2026, 9, 19, dc.h, dc.m);
     const DAY = ["SUN","MON","TUE","WED","THU","FRI","SAT"][now.getDay()];
     const MON = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][now.getMonth()];
     const target = (DAY + String(now.getDate()).padStart(2,"0") + MON
@@ -1219,7 +1236,7 @@ export default class PulseLogic extends DCLogic {
   componentWillUnmount(){ window.removeEventListener("paste", this._paste); window.removeEventListener("resize", this._resize); window.removeEventListener("keydown", this._key); clearInterval(this._t); clearInterval(this._clockTimer); clearInterval(this._flapBoot); cancelAnimationFrame(this._raf); clearInterval(this._fallback); clearInterval(this._actTimer); clearInterval(this._kpiTimer); }
 
   ask(q){
-    const a = pickAnswer(q);
+    const a = liveAnswer(q) || pickAnswer(q);
     const words = a.text.split(" ").length;
     const thread = this.state.thread.concat([
       {role:"user", text:q},
@@ -1355,7 +1372,9 @@ export default class PulseLogic extends DCLogic {
       }, 450);
     }
     const st = this.state, page = st.page;
-    const openKeys = ORDER.filter(k => !st.resolved[k]);
+    this._ov = inboxOverrides();
+    this._kpiOv = kpiOverrides();
+    const openKeys = ORDER.filter(k => !st.resolved[k] && !(this._ov[k] && this._ov[k].hidden));
 
     // Equal grid columns (width:max-content + 1fr) let a single thumb glide by
     // translateX(index * 100%) — no measurement, and identical motion everywhere.
@@ -1750,13 +1769,13 @@ export default class PulseLogic extends DCLogic {
         suggestions:["spec","order book","quote","job card"]},
       ontology:{eyebrow:"ONTOLOGY", title:"Ontology", blurb:recSec.blurb,
         placeholder:"", kind:"", scroll:"", suggestions:[]}
-    }[recSec.id];
+    }[recSec.id] || {eyebrow:"", title:"", blurb:"", placeholder:"", kind:"", scroll:"", suggestions:[]};
 
     const recModel = {
       title: HERO.title, blurb: HERO.blurb,
       eyebrow: HERO.eyebrow, askPlaceholder: HERO.placeholder,
       searchKind: HERO.kind, scrollHint: HERO.scroll,
-      hasHero: page === "Records" && recSec.id !== "ontology",
+      hasHero: page === "Records" && (recSec.id === "contacts" || recSec.id === "files"),
       isContacts: page === "Records" && recSec.id === "contacts",
       isFiles: page === "Records" && recSec.id === "files",
       isOntology: page === "Records" && recSec.id === "ontology",
@@ -2489,11 +2508,11 @@ export default class PulseLogic extends DCLogic {
       normal:{dot:DIM, tileBg:"var(--track)"}
     };
     const rowFor = (k) => {
-      const it = ITEMS[k], expanded = st.open === k, imp = importanceStyle[it.importance];
+      const it = Object.assign({}, ITEMS[k], (this._ov || {})[k] || {}), expanded = st.open === k, imp = importanceStyle[it.importance];
       return Object.assign({}, it, imp, {
         expanded, chevron: expanded ? "180deg" : "0deg",
         open: () => this.setState({open: expanded ? null : k}),
-        action: (e) => { if (e) e.stopPropagation(); this.setState({resolved:Object.assign({},st.resolved,{[k]:true}), open:null}); },
+        action: (e) => { if (e) e.stopPropagation(); if (it.target) { this.setState({open:null}); this.demoGo(it.target[0], it.target[1]); if (it.target[2]) DemoActions.open(it.target[2], it.target[3]); } else this.setState({resolved:Object.assign({},st.resolved,{[k]:true}), open:null}); },
         ask: (e) => { if (e) e.stopPropagation(); this.ask(it.title); }
       });
     };
@@ -3082,7 +3101,13 @@ export default class PulseLogic extends DCLogic {
     const DIRS_ORDER = ["People","Organisations","Teams","Locations","Site visits"];
     const ADMIN_ORDER = ["Automations","System health","Installed modules"];
     let contextNav, contextHint, searchHint;
-    if (page === "Settings"){
+    if (MODULE_TABS[page]) {
+      const cur = this.secOf(page);
+      contextNav = MODULE_TABS[page].map(([id, label]) => seg(label, cur === id,
+        () => this.setState(prev => ({sec: Object.assign({}, prev.sec, {[page]: id})})), tabCount(page, id)));
+      contextHint = (page === "Stock" ? "VEHICLE STOCK" : page.toUpperCase()) + " · " + ((MODULE_TABS[page].find(t => t[0] === cur) || ["", ""])[1]).toUpperCase();
+      searchHint = "Search " + (page === "Stock" ? "vehicle stock" : page.toLowerCase());
+    } else if (page === "Settings"){
       contextNav = ADMIN_GROUPS.map(grp => seg(
         grp[0].charAt(0) + grp[0].slice(1).toLowerCase(),
         st.adminGroup === grp[0],
@@ -3160,8 +3185,15 @@ export default class PulseLogic extends DCLogic {
     const roomy = st.w >= 1320, mid = st.w >= 1120;
     return {
       nav, contextNav, contextHint, searchHint, queueTasks,
-      isRecords: page === "Records",
-      isActivity: page === "Activity",
+      isRecords: page === "Records" && recSec.id !== "companies" && recSec.id !== "vehicles",
+      demo: (() => {
+        if (page === "Records") return (recSec.id === "companies" || recSec.id === "vehicles") ? {page, section: recSec.id} : null;
+        if (!MODULE_TABS[page]) return null;
+        const sec = this.secOf(page);
+        if (page === "Agents" && sec === "directory") return null;
+        return {page, section: sec};
+      })(),
+      isActivity: false,
       act: actModel,
       admin: adminModel,
       showRecordsWash: page === "Records" && recSec.id !== "ontology",
@@ -3189,7 +3221,7 @@ export default class PulseLogic extends DCLogic {
 
       /* header zones */
       isAgents: page === "Agents",
-      showPillNav: page !== "Agents",
+      showPillNav: true,
 
       /* home widgets */
       widgetHint: st.widgetEdit ? "EDITING BOARD" : String(st.widgets.length) + " WIDGETS",
@@ -3213,7 +3245,7 @@ export default class PulseLogic extends DCLogic {
       removeKpi: () => this.toggleIn("widgets", "kpi"),
       removeVisits: () => this.toggleIn("widgets", "visits"),
       miniKpis: ["allocation","openJobs","invoiceReady","overdue"].map(k => {
-        const d = KPI_DEFS[k];
+        const d = Object.assign({}, KPI_DEFS[k], (this._kpiOv || {})[k] || {});
         return {label:d.label, value:d.value, delta:d.delta, deltaColor: d.dir === "up" ? GREEN : RED};
       }),
       visitWidget: [
@@ -3224,7 +3256,7 @@ export default class PulseLogic extends DCLogic {
 
       /* dashboard */
       isDashboard: page === "Dashboard",
-      dashTitle: "Reynolds Commercials · " + areaLabel,
+      dashTitle: "Reynolds Commercials · " + ((MODULE_TABS.Dashboard.find(t => t[0] === this.secOf("Dashboard")) || ["", "Executive"])[1]),
       kpiEdit: st.kpiEdit,
       toggleKpiEdit: () => this.setState(prev => ({kpiEdit: !prev.kpiEdit})),
       kpiEditLabel: st.kpiEdit ? "Done" : "Edit KPIs",
@@ -3233,7 +3265,7 @@ export default class PulseLogic extends DCLogic {
       kpiEditColor: st.kpiEdit ? "var(--accent)" : "var(--on-accent)",
       kpiColumns: String(Math.max(1, st.kpiKeys.length)),
       kpis: st.kpiKeys.map((k, ki) => {
-        const d = KPI_DEFS[k];
+        const d = Object.assign({}, KPI_DEFS[k], (this._kpiOv || (this._kpiOv = kpiOverrides()))[k] || {});
         const up = d.dir === "up";
         return {label:d.label, value:this.countValue(d.value, ki), delta:d.delta, hint:d.hint,
           bg: "var(--kpi-card)",
@@ -4000,7 +4032,7 @@ export default class PulseLogic extends DCLogic {
       setArrowB: "position:absolute;left:50%;top:50%;margin:-7.5px 0 0 -7.5px;"
         + "transform:translateX(" + (st.setBtnHover ? "0" : "-22px") + ");opacity:" + (st.setBtnHover ? "1" : "0") + ";"
         + "transition:transform .45s cubic-bezier(.22,.9,.16,1) " + (st.setBtnHover ? ".08s" : "0s") + ",opacity .3s var(--ease) " + (st.setBtnHover ? ".08s" : "0s"),
-      showTeam: (st.w - (st.railOpen ? 252 : 68)) >= 1000 || contextNav.length <= 3,
+      showTeam: ((st.w - (st.railOpen ? 252 : 68)) >= 1000 && contextNav.length <= 6) || contextNav.length <= 3,
       showTheme: (st.w - (st.railOpen ? 252 : 68)) >= 820 || contextNav.length <= 3,
       tabPad: (st.w - (st.railOpen ? 252 : 68)) >= 1100 ? "0 18px" : (st.w - (st.railOpen ? 252 : 68)) >= 1000 ? "0 12px" : "0 10px",
       _tabs: (() => { const tight = (st.w - (st.railOpen ? 252 : 68)) < 1000 && contextNav.length >= 4;
@@ -4012,9 +4044,9 @@ export default class PulseLogic extends DCLogic {
       barLabel: st.barOpen ? "Collapse the bar" : "Expand the bar",
       barChevronStyle: "transition:transform .3s var(--ease);transform:rotate(" + (st.barOpen ? "0deg" : "180deg") + ")",
       toggleBar: () => this.setState(prev => ({barOpen: !prev.barOpen})),
-      showHint: roomy && st.barOpen,
+      showHint: roomy && st.barOpen && contextNav.length <= 4,
       showSearchText: mid && st.barOpen,
-      showProfileText: roomy,
+      showProfileText: roomy && contextNav.length <= 5,
       // Tabs size to their own labels; NavThumb measures, so equal tracks aren't needed.
       navGroupStyle: "position:relative;display:inline-grid;grid-auto-flow:column;grid-auto-columns:max-content;"
         + "width:max-content;max-width:100%;align-items:center;padding:0;flex:" + (contextNav.length <= 3 ? "none" : "0 1 auto") + ";min-width:0;border-radius:999px;"
@@ -4075,7 +4107,7 @@ export default class PulseLogic extends DCLogic {
         return (live ? live + " AGENTS RUNNING" : "NO AGENTS RUNNING") + " · SYNCED 2 MIN AGO";
       })(),
       homeSubline: "Ask about any vehicle, job or number across the workshop, stock, sales and CVRT.",
-      approvalsPill: openKeys.length + " ITEMS NEED YOU · WORKSHOP, SALES, CVRT",
+      approvalsPill: openKeys.filter(k => k !== "cvrtok").length + " ITEMS NEED YOU · WORKSHOP, SALES, CVRT",
       showApprovalNote: openKeys.length > 0 && !st.approvalNoteHidden,
       dismissApprovalNote: () => this.setState({approvalNoteHidden:true}),
       /* Home canvas: a decorative layer the user can switch, scoped to the
@@ -4178,8 +4210,8 @@ export default class PulseLogic extends DCLogic {
         style: labelStyle(st.hovered !== null, st.hoverTop)
       },
       isChat: page === "Home",
-      isWork: page === "Work",
-      isSettings: page === "Settings",
+      isWork: false,
+      isSettings: false,
       admin: adminModel,
       inboxCount: String(openKeys.length),
       inboxEmpty: openKeys.length === 0,
@@ -4207,7 +4239,7 @@ export default class PulseLogic extends DCLogic {
           confirmSummary: m.confirmSummary || "",
           confirmHash: "sha256 a4f19c…",
           hasActions: done && m.confirm !== true && !!m.actions,
-          actions:(m.actions || []).map(a => ({label:a[0], bg:a[1] ? LIME : "none", color:a[1] ? "var(--on-accent)" : "var(--ink)", border:a[1] ? LIME : "var(--border)", run:() => this.ask(a[0])}))
+          actions:(m.actions || []).map(a => ({label:a[0], bg:a[1] ? LIME : "none", color:a[1] ? "var(--on-accent)" : "var(--ink)", border:a[1] ? LIME : "var(--border)", run:() => { if (a[2]) { this.demoGo(a[2][0], a[2][1]); if (a[2][2]) DemoActions.open(a[2][2], a[2][3]); } else this.ask(a[0]); }}))
         };
       }),
       suggestions: [
