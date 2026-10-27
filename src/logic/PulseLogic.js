@@ -94,6 +94,23 @@ export default class PulseLogic extends DCLogic {
     setNavigator((page, sec) => this.demoGo(page, sec));
     setThemeBridge(id => this.setState({theme:id}), () => this.state.theme);
     demoSubscribe(() => { if (this.__host) this.forceUpdate(); });
+    Object.assign(this.state, this.fromHash());
+  }
+  /* Deep links: #workshop/planner opens that page and tab. The hash follows navigation. */
+  fromHash(){
+    if (typeof window === "undefined") return {};
+    const [p, s] = window.location.hash.replace(/^#\/?/, "").toLowerCase().split("/");
+    const page = NAV.concat([{page:"Settings"}]).map(n => n.page).find(x => x && x.toLowerCase() === p);
+    if (!page) return {};
+    if (page === "Records") return REC_SECTIONS.some(r => r.id === s) ? {page, recSection:s} : {page};
+    const tabs = MODULE_TABS[page];
+    return tabs && tabs.some(t => t[0] === s) ? {page, sec:Object.assign({}, this.state.sec, {[page]: s})} : {page};
+  }
+  syncHash(){
+    const page = this.state.page;
+    const sec = page === "Records" ? this.state.recSection : (MODULE_TABS[page] ? this.secOf(page) : "");
+    const hash = page === "Home" ? "" : "#" + page.toLowerCase() + (sec ? "/" + sec : "");
+    if (hash !== window.location.hash) history.replaceState(null, "", hash || window.location.pathname);
   }
   /* Navigation used by the Reynolds demo modules (src/demo). */
   demoGo(page, sec){
@@ -1181,6 +1198,8 @@ export default class PulseLogic extends DCLogic {
     setTimeout(() => { const nav = document.querySelector('nav[data-rail-nav]');
       if (nav && window.ResizeObserver){ this._railRO = new ResizeObserver(() => this.syncRailThumb()); this._railRO.observe(nav); } }, 50);
     this.seedActivity();
+    this._hash = () => { const next = this.fromHash(); if (next.page) { this.go(next.page); this.setState(next); } };
+    window.addEventListener("hashchange", this._hash);
     if (this.state.page === "Dashboard") this.startKpiCount();
     this._actTimer = setInterval(() => { if (this.state.page === "Activity") this.tickActivity(); }, 700);
     this._clockTimer = setInterval(() => { if (this.state.page === "Home") this.forceUpdate(); }, 1000);
@@ -1233,7 +1252,7 @@ export default class PulseLogic extends DCLogic {
     };
     window.addEventListener("paste", this._paste);
   }
-  componentWillUnmount(){ window.removeEventListener("paste", this._paste); window.removeEventListener("resize", this._resize); window.removeEventListener("keydown", this._key); clearInterval(this._t); clearInterval(this._clockTimer); clearInterval(this._flapBoot); cancelAnimationFrame(this._raf); clearInterval(this._fallback); clearInterval(this._actTimer); clearInterval(this._kpiTimer); }
+  componentWillUnmount(){ window.removeEventListener("hashchange", this._hash); window.removeEventListener("paste", this._paste); window.removeEventListener("resize", this._resize); window.removeEventListener("keydown", this._key); clearInterval(this._t); clearInterval(this._clockTimer); clearInterval(this._flapBoot); cancelAnimationFrame(this._raf); clearInterval(this._fallback); clearInterval(this._actTimer); clearInterval(this._kpiTimer); }
 
   ask(q){
     const a = liveAnswer(q) || pickAnswer(q);
@@ -1264,7 +1283,7 @@ export default class PulseLogic extends DCLogic {
       if (!this._railLive){ this._railLive = true; setTimeout(() => this.setState({railThumbLive:true}), 60); }
     }
   }
-  componentDidUpdate(){ this.syncRailThumb(); }
+  componentDidUpdate(){ this.syncRailThumb(); this.syncHash(); }
 
   go(page){
     const order = NAV.filter(n => !n.divider).map(n => n.page).concat(["Settings"]);
