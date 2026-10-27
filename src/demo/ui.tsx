@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { A, cname, company, daysBetween, dur, elapsed, eur, fmtDate, handoverGates, person, pname, quoteGates, quoteTotals, standingCost, useDemo, vehicleLabel, type State } from "./store";
 import { RECEIVABLES, SERVICE_VEHICLES } from "./fixtures";
@@ -290,5 +290,64 @@ function QuoteDetail({ id }: { id: string }) {
         <div className="d-row"><Btn sm kind="primary" onClick={() => navTo("Sales", "quote")}>Open in Quote Builder</Btn></div>
       </div>
     </>
+  );
+}
+
+/* ---- familiar pieces from Anthony's existing tools ------------------------- */
+/** Irish registration plate badge, as on his planner and clocking boards. */
+export const Plate = ({ reg }: { reg: string }) => <span className="ar-plate" title={reg}><i>IRL</i><b>{reg}</b></span>;
+
+/** KPI tile in the style of his tracker and planner headers. */
+export function Kpi({ label, value, unit, hint, aside, mark, tone, onClick, children }: {
+  label: string; value: ReactNode; unit?: ReactNode; hint?: ReactNode; aside?: ReactNode; mark?: string; tone?: "acc" | "ok" | "warn" | "bad"; onClick?: () => void; children?: ReactNode;
+}) {
+  const c = tone === "ok" ? "var(--ok)" : tone === "warn" ? "var(--warn)" : tone === "bad" ? "var(--bad)" : "var(--accent)";
+  const bg = tone === "ok" ? "var(--ok-soft)" : tone === "warn" ? "var(--warn-soft)" : tone === "bad" ? "var(--bad-soft)" : "var(--accent-soft)";
+  return (
+    <div className={"ar-kpi " + (onClick ? "click" : "")} onClick={onClick} role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? e => { if (e.key === "Enter") onClick(); } : undefined}>
+      <div className="k">{label}{mark && <i style={{ color: c, background: bg }} aria-hidden>{mark}</i>}</div>
+      <div className="v" style={tone && tone !== "acc" ? { color: c } : undefined}>{value}{unit && <small>{unit}</small>}</div>
+      {children}
+      {(hint || aside) && <div className="h"><span>{hint}</span>{aside}</div>}
+    </div>
+  );
+}
+
+/** Drop zone that "reads" a document in a few visible steps, then calls onRead.
+    Nothing is parsed: the demo swaps in a sample result and says so. */
+export function ReadDrop({ title, sub, steps, accept, onRead, red, compact, button, trigger, sample }: {
+  title: string; sub: string; steps: string[]; accept?: string; onRead: (fileName: string) => void; red?: boolean; compact?: boolean; button?: string;
+  /** Bump to run a simulated drop of `sample` from outside (e.g. a "Simulate drop" button). */
+  trigger?: number; sample?: string;
+}) {
+  const [over, setOver] = useState(false);
+  const [run, setRun] = useState<{ name: string; i: number } | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const done = useRef(onRead);
+  done.current = onRead;
+  useEffect(() => {
+    if (!run) return;
+    if (run.i >= steps.length) { done.current(run.name); setRun(null); return; }
+    const t = setTimeout(() => setRun(r => r && { ...r, i: r.i + 1 }), 520);
+    return () => clearTimeout(t);
+  }, [run, steps.length]);
+  const start = (name: string) => setRun(r => r ?? { name, i: 0 });
+  useEffect(() => { if (trigger) start(sample ?? "sample.pdf"); }, [trigger, sample]);
+  return (
+    <div className={"ar-drop " + (over ? "over " : "") + (red ? "red" : "")} style={compact ? { padding: 14 } : undefined}
+      onClick={() => input.current?.click()} role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter") input.current?.click(); }}
+      onDragOver={e => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+      onDrop={e => { e.preventDefault(); setOver(false); const f = e.dataTransfer.files[0]; if (f) start(f.name); }}>
+      <input ref={input} type="file" hidden accept={accept} onChange={e => { const f = e.target.files?.[0]; if (f) start(f.name); e.target.value = ""; }} />
+      {run ? <>
+        <b>Reading {run.name}</b>
+        <div className="ar-steps">{steps.map((x, i) => <div key={x} className={i < run.i ? "done" : i === run.i ? "on" : ""}>{x}</div>)}</div>
+      </> : <>
+        <span className="ic" aria-hidden>{accept?.includes("pdf") ? "PDF" : accept?.includes("xls") ? "XLS" : "UP"}</span>
+        <b>{title}</b><span>{sub}</span>
+        {button && <span className="d-btn sm" style={{ marginTop: 4 }}>{button}</span>}
+      </>}
+    </div>
   );
 }

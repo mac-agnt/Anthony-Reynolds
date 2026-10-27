@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { A, cname, eur, fmtDate, standingCost, useDerived, type Doc } from "./store";
 import { COMPANIES, ORDER_BOOK_NEXT, type Vehicle } from "./fixtures";
-import { Portal, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, Metric, Note, NumInput, Page, RoleHidden, Seg, Table, VLink, canSeeCost } from "./ui";
+import { Portal, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, Kpi, Metric, Note, NumInput, Page, ReadDrop, RoleHidden, Seg, Table, VLink, canSeeCost } from "./ui";
 import { go } from "./nav";
 
 const PROMISE: Record<string, string> = { V019: "2026-10-28" };
@@ -129,90 +129,224 @@ function StockCheckDrawer({ close }: { close: () => void }) {
   );
 }
 
-function StockCard({ v, onEdit, onSell }: { v: Vehicle; onEdit: () => void; onSell: () => void }) {
+/* Stock Delta & Tracker: the layout of Anthony's existing tracker, on the shared store. */
+const SNAP = new Date("2026-10-19T10:00:00");
+const ddmmyyyy = (d: Date) => `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+const arrived = (v: Vehicle) => ddmmyyyy(new Date(SNAP.getTime() - (v.receivedDaysAgo ?? 0) * 86400000));
+const family = (v: Vehicle) => v.range === "Used & trade-in" ? "Used Vehicles" : v.model === "Master" ? "MASTER" : v.model === "Trafic" ? "TRAFIC"
+  : v.model.startsWith("D") ? "D" : v.model.startsWith("T") ? "T" : v.model.startsWith("C") ? "C" : v.model.toUpperCase();
+const FAMILY_TITLE: Record<string, [string, string]> = {
+  C: ["Renault Trucks C Range", "C"], D: ["Renault Trucks D Range", "D"], T: ["Renault Trucks T Range", "T"],
+  MASTER: ["Renault Master", "M"], TRAFIC: ["Renault Trafic", "TR"], "Used Vehicles": ["Used Vehicles", "U"],
+};
+const FAMILY_ORDER = ["C", "D", "MASTER", "T", "TRAFIC", "Used Vehicles"];
+type StockView = "all" | "onsite" | "incoming" | "reserved" | "prep" | "sold";
+const trackerChip = (v: Vehicle) => {
+  if (v.status === "incoming") return <Chip>{v.eta ? `Due ${ddmmyyyy(new Date(v.eta))}` : "Due"}</Chip>;
+  if (v.status === "reserved") return <Chip tone="acc">Reserved ({arrived(v)})</Chip>;
+  if (v.status === "preparation") return <Chip tone="warn">In prep ({arrived(v)})</Chip>;
+  if (v.status === "sold") return <Chip>Sold {v.sold ? ddmmyyyy(new Date(v.sold.date)) : ""}</Chip>;
+  return <Chip tone="ok">In stock ({arrived(v)})</Chip>;
+};
+const priceOf = (v: Vehicle) => {
+  const net = v.costs[0]?.amount ?? 0;
+  const interest = v.costs.filter(c => /interest/i.test(c.label)).reduce((t, c) => t + c.amount, 0);
+  const extras = v.costs.slice(1).reduce((t, c) => t + c.amount, 0) - interest;
+  return { net, extras, interest, standing: standingCost(v) };
+};
+
+function TrackerCard({ v, onEdit, onSell }: { v: Vehicle; onEdit: () => void; onSell: () => void }) {
   const [s] = useDerived();
+  const p = priceOf(v);
   return (
-    <article className="stock-card">
-      <div className="stock-img" role="img" aria-label={`No photo supplied for ${v.id}, Renault ${v.model} ${v.variant}`}>
-        <span className="model">{v.model}</span>
-        <div><div style={{ fontWeight: 600 }}>Renault {v.model}</div><div className="alt">Photo not supplied · placeholder</div></div>
+    <article className="ar-vcard">
+      <div className="d-row" style={{ gap: 8, flexWrap: "nowrap" }}>
+        <button className="d-link vin d-grow" style={{ minWidth: 0 }} onClick={() => A.open("vehicle", v.id)} title="Open record">{v.vin ?? v.svo}</button>{trackerChip(v)}
       </div>
-      <div className="stock-body">
-        <div className="d-row" style={{ gap: 6 }}><b style={{ fontSize: 15 }}>{v.id}</b><span className="d-muted">{v.variant}</span><span className="d-grow" />{statusChip(v)}</div>
-        <div className="d-mono d-muted" style={{ fontSize: 10.5 }}>{v.vin ?? "VIN not yet issued"} · {v.svo}{v.reg ? ` · ${v.reg}` : ""}</div>
-        <div className="d-muted">{v.colour} · {v.gearbox}{v.power ? ` · ${v.power}` : ""} · {v.status === "incoming" ? "inbound" : v.location}</div>
-        <div className="d-row" style={{ gap: 6 }}>{specChip(v)}{v.reviewFlag && <Chip tone="warn">Review required</Chip>}</div>
-        {(v.customer || v.promisedTo || v.jobRef) && <div className="d-muted">{v.customer ? <>For <CLink id={v.customer} /></> : v.promisedTo ? <>Promised to <CLink id={v.promisedTo} /></> : null}{v.jobRef ? <> · <JLink id={v.jobRef} /></> : null}</div>}
-        {canSeeCost(s) && <div className="d-row"><span className="d-muted d-grow">Standing cost</span><b>{eur(standingCost(v))}</b></div>}
-        {v.notes && <div className="d-faint" style={{ fontSize: 11.5 }}>{v.notes}</div>}
-      </div>
-      <div className="stock-actions">
-        <Btn sm onClick={() => { A.focus("specVehicle", v.id); go("Stock", "specs"); }}>Open specification</Btn>
-        <Btn sm onClick={onEdit}>Edit details</Btn>
-        <Btn sm onClick={() => { A.newQuote(v.id); go("Sales", "quote"); }}>Create quote</Btn>
-        <Btn sm kind="ghost" onClick={() => A.open("vehicle", v.id)}>Record</Btn>
-        {v.status !== "incoming" && <Btn sm kind="ghost" onClick={onSell}>Confirm sale…</Btn>}
+      <div><div className="make">Renault{v.range === "Trucks" ? " Trucks" : ""}</div><b style={{ fontSize: 14 }}>{v.model}</b> <span className="d-muted">{v.variant}</span></div>
+      {canSeeCost(s) ? <div className="ar-price">
+        <div><div className="l">Dealer net price</div><div className="x">{eur(p.net)}</div></div>
+        <div><div className="l acc">Extras cost</div><div className="x">{eur(p.extras)}</div></div>
+        <div><div className="l amb">Stocking interest</div><div className="x">{eur(p.interest)}</div></div>
+        <div className="stand"><div className="l">Standing price</div><div className="x" style={{ fontSize: 15 }}>{eur(p.standing)}</div></div>
+      </div> : <RoleHidden what="Pricing" />}
+      <dl className="ar-vkv">
+        <dt>Location:</dt><dd>{v.status === "incoming" ? "Inbound" : v.location}</dd>
+        <dt>Customer:</dt><dd>{v.customer ? <CLink id={v.customer} /> : v.promisedTo ? <><CLink id={v.promisedTo} /> (promised)</> : "---"}</dd>
+        <dt>Job Number:</dt><dd>{v.jobRef ? <JLink id={v.jobRef} /> : "---"}</dd>
+      </dl>
+      {(v.reviewFlag || v.specStatus !== "approved") && <div className="d-row" style={{ gap: 5 }}>{v.reviewFlag && <Chip tone="warn">Missing from latest file</Chip>}{v.specStatus !== "approved" && specChip(v)}</div>}
+      <div className="acts">
+        <Btn sm onClick={onEdit}>Edit Details</Btn>
+        {v.status === "sold" ? <Btn sm kind="ghost" onClick={() => A.open("vehicle", v.id)}>Record</Btn> : <Btn sm className="solid-bad" onClick={onSell} disabled={v.status === "incoming"} title={v.status === "incoming" ? "Not on site yet" : undefined}>Mark Sold</Btn>}
       </div>
     </article>
   );
 }
 
+function BackfillDialog({ close, sell }: { close: () => void; sell: (v: Vehicle) => void }) {
+  const [, d] = useDerived();
+  const [text, setText] = useState("");
+  const keys = text.split(/[\s,;]+/).map(x => x.trim().toUpperCase()).filter(Boolean);
+  const hits = keys.map(k => ({ k, v: d.active.find(v => (v.vin ?? "").toUpperCase() === k || v.svo.toUpperCase() === k || v.id === k) }));
+  return (
+    <div className="d-modal-scrim" onClick={close}><div className="d-modal" style={{ width: "min(600px,100%)" }} onClick={e => e.stopPropagation()} role="dialog" aria-label="Backfill sales by VIN">
+      <div className="d-drawer-head"><div className="d-grow"><div className="d-eyebrow">Backfill sales</div><b style={{ fontSize: 18 }}>Match sold vehicles by VIN</b><div className="d-muted">Paste VINs or SVO numbers, one per line. Each match still needs a confirmed sale.</div></div><Btn sm kind="ghost" onClick={close}>Close</Btn></div>
+      <div className="d-drawer-body d-grid">
+        <textarea className="d-textarea" rows={4} value={text} onChange={e => setText(e.target.value)} placeholder={d.active.slice(0, 2).map(v => v.vin ?? v.svo).join("\n")} aria-label="VINs" />
+        <Btn sm kind="ghost" onClick={() => setText(d.onSite.slice(0, 3).map(v => v.vin ?? v.svo).join("\n") + "\nVF6XXXXXXXXX00000")}>Paste sample VINs</Btn>
+        {hits.length > 0 && <div className="d-list">{hits.map(({ k, v }) => <div className="d-li" key={k}>
+          <span className="d-mono d-grow">{k}</span>
+          {v ? <><span className="d-muted">{v.id} · {v.model} {v.variant}</span>{v.status === "incoming" ? <Chip>Not on site</Chip> : <Btn sm kind="primary" onClick={() => sell(v)}>Mark sold…</Btn>}</> : <Chip tone="warn">Not in active stock</Chip>}
+        </div>)}</div>}
+        <Note>No VIN is marked sold automatically. Unmatched VINs are listed, never guessed.</Note>
+      </div>
+    </div></div>
+  );
+}
+
+function AddVehicleDialog({ close }: { close: () => void }) {
+  const [s] = useDerived();
+  const [f, setF] = useState({ model: "Master", variant: "LH35 panel van", vin: "", location: "Main yard", cost: 29500, eta: "", customer: "" });
+  const dup = f.vin.trim() && s.stock.some(v => (v.vin ?? "").toUpperCase() === f.vin.trim().toUpperCase());
+  return (
+    <div className="d-modal-scrim" onClick={close}><div className="d-modal" style={{ width: "min(560px,100%)" }} onClick={e => e.stopPropagation()} role="dialog" aria-label="Add vehicle manually">
+      <div className="d-drawer-head"><div className="d-grow"><div className="d-eyebrow">Add vehicle manually</div><b style={{ fontSize: 18 }}>New stock unit</b></div><Btn sm kind="ghost" onClick={close}>Close</Btn></div>
+      <div className="d-drawer-body d-grid">
+        <div className="d-grid d-g2">
+          <Field label="Model"><select className="d-select" value={f.model} onChange={e => setF({ ...f, model: e.target.value })}>{["Master", "Trafic", "C380", "D14", "D18", "D Wide", "T480"].map(m => <option key={m}>{m}</option>)}</select></Field>
+          <Field label="Variant"><input className="d-input" value={f.variant} onChange={e => setF({ ...f, variant: e.target.value })} /></Field>
+          <Field label="VIN" hint="Leave blank if not issued yet"><input className="d-input d-mono" value={f.vin} onChange={e => setF({ ...f, vin: e.target.value })} /></Field>
+          <Field label="Dealer net price (€)"><NumInput value={f.cost} onChange={n => setF({ ...f, cost: n })} width={140} /></Field>
+          <Field label="Location"><select className="d-select" value={f.location} onChange={e => setF({ ...f, location: e.target.value })}>{["Main yard", "Front line", "Workshop", "Body shop"].map(m => <option key={m}>{m}</option>)}</select></Field>
+          <Field label="Due date" hint="Set for an incoming unit"><input className="d-input" type="date" value={f.eta} onChange={e => setF({ ...f, eta: e.target.value })} /></Field>
+          <Field label="Customer"><select className="d-select" value={f.customer} onChange={e => setF({ ...f, customer: e.target.value })}><option value="">None</option>{COMPANIES.filter(c => c.kind === "customer").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        </div>
+        {dup && <Flag tone="bad">That VIN is already tracked. The tracker keeps one record per VIN.</Flag>}
+        <div className="d-row"><span className="d-grow" /><Btn onClick={close}>Cancel</Btn>
+          <Btn kind="primary" disabled={!!dup || !f.variant.trim() || f.cost <= 0} onClick={() => { A.addVehicle({ ...f, customer: f.customer || null }); close(); }}>Add vehicle</Btn></div>
+      </div>
+    </div></div>
+  );
+}
+
 export function InStock() {
   const [s, d] = useDerived();
-  const [mode, setMode] = useState<"active" | "sold">("active");
-  const [layout, setLayout] = useState<"cards" | "table">("cards");
+  const [view, setView] = useState<StockView>("all");
+  const [fam, setFam] = useState("All");
   const [q, setQ] = useState("");
   const [closed, setClosed] = useState<Record<string, boolean>>({});
   const [edit, setEdit] = useState<Vehicle | null>(null);
   const [sell, setSell] = useState<Vehicle | null>(null);
   const [check, setCheck] = useState(false);
+  const [backfill, setBackfill] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [how, setHow] = useState(false);
   const [restore, setRestore] = useState<{ id: string; reason: string } | null>(null);
-  const match = (v: Vehicle) => !q || [v.id, v.vin ?? "", v.svo, v.reg, v.jobRef ?? "", v.model, v.variant].some(x => x.toLowerCase().includes(q.toLowerCase()));
-  const rows = (mode === "active" ? d.active : d.sold).filter(match);
-  const ranges = ["Master", "Trafic", "Trucks", "Used & trade-in"] as const;
+  const restoreInput = useRef<HTMLInputElement>(null);
+  const ob = ORDER_BOOK_NEXT;
+  const applied = s.imports.applied.includes(ob.importId);
+  const loaded = s.imports.previewOpen || applied;
+
+  const match = (v: Vehicle) => !q || [v.id, v.vin ?? "", v.svo, v.reg, v.jobRef ?? "", v.model, v.variant, cname(v.customer ?? v.promisedTo)].some(x => x.toLowerCase().includes(q.toLowerCase()));
+  const base: Vehicle[] = view === "sold" ? d.sold : view === "onsite" ? d.onSite : view === "incoming" ? d.incoming : view === "reserved" ? d.reserved : view === "prep" ? d.preparation : d.active;
+  const searched = base.filter(match);
+  const counts = FAMILY_ORDER.map(f => [f, searched.filter(v => family(v) === f).length] as const).filter(([, n]) => n > 0);
+  const rows = fam === "All" ? searched : searched.filter(v => family(v) === fam);
+  const value = d.active.reduce((t, v) => t + standingCost(v), 0);
+  const rebates = d.active.reduce((t, v) => t + (v.rebate?.amount ?? 0), 0);
+  const soldYear = d.sold.filter(v => v.sold?.date.startsWith("2026")).length;
+  const download = (name: string, body: string, type: string) => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([body], { type })); a.download = name; a.click(); };
+
   return (
     <Page>
-      <Head title={mode === "active" ? "In stock" : "Sold archive"} sub={mode === "active" ? "Grouped by model range. Search by VIN, SVO / order reference, registration or job number." : "Confirmed sales only. Restoring a record needs a reason and keeps a reversible history entry."}>
-        <Seg value={mode} onChange={setMode} options={[["active", `Active (${d.active.length})`], ["sold", `Sold (${d.sold.length})`]]} label="Stock view" />
-        {mode === "active" && <Seg value={layout} onChange={setLayout} options={[["cards", "Cards"], ["table", "Compact list"]]} label="Layout" />}
-        <input className="d-input" style={{ width: 230 }} placeholder="Search VIN, SVO, reg, job…" value={q} onChange={e => setQ(e.target.value)} aria-label="Search stock" />
-        {mode === "active" && <Btn onClick={() => setCheck(true)}>Physical stock check</Btn>}
+      <Head title="Stock Delta & Tracker" sub="Weekly order book in, delta out. Prices, locations, customers and sold records carry across every upload.">
+        <div className="ar-tools">
+          <Btn className="ok" onClick={() => setCheck(true)}>Physical Stock Check Audit</Btn>
+          <Btn className="bad" onClick={() => setBackfill(true)}>Backfill Sales (by VIN)</Btn>
+          <Btn onClick={() => download("reynolds-stock-backup-sample.json", JSON.stringify({ note: "SAMPLE DATA, Reynolds demo", stock: s.stock }, null, 2), "application/json")}>Backup</Btn>
+          <Btn className="vio" onClick={() => restoreInput.current?.click()}>Restore</Btn>
+          <input ref={restoreInput} type="file" hidden accept=".json" onChange={e => { const f = e.target.files?.[0]; if (f) A.toast(`${f.name} read. Restoring over live stock is switched off in the demo snapshot`); e.target.value = ""; }} />
+          <Btn className="amb" onClick={A.previewImport}>Demo Data</Btn>
+          <Btn onClick={() => csv("active-stock-sample.csv", [["Vehicle", "VIN", "SVO", "Model", "Status", "Location", "Customer", "Job", "Standing price"], ...d.active.map(v => [v.id, v.vin ?? "", v.svo, `${v.model} ${v.variant}`, v.status, v.location, cname(v.customer ?? v.promisedTo), v.jobRef ?? "", standingCost(v)])])}>Export Active Stock</Btn>
+          <Btn className="bad" onClick={() => { if (window.confirm("Reset the whole demo back to the 10:00 snapshot?")) A.reset(); }}>Reset</Btn>
+        </div>
       </Head>
-      {mode === "sold" ? (
-        <Card className="flush">
+
+      <div className="d-split" style={{ marginBottom: 14 }}>
+        <Card title="Upload Weekly Excel Stock List">
+          <p className="d-muted" style={{ margin: "0 0 12px" }}>Drag and drop the weekly spreadsheet. Model panels build from the model column and active stock value from the price column. Photos, locations, dates, customer details and sold records are preserved across uploads.</p>
+          <ReadDrop accept=".xlsx,.xls,.csv" title="Click to browse or drop your weekly Excel stock file here" sub="Automatic SVO de-duplication and model classification"
+            steps={["Reading rows", "De-duplicating SVO numbers", "Classifying models", "Comparing with last week"]}
+            onRead={name => { A.previewImport(); A.toast(`${name} read. Showing the sample order book delta (files aren't parsed in the demo)`); }} />
+          {loaded && <div className="d-row" style={{ marginTop: 12 }}>
+            <Chip tone="acc">+{ob.added.length} new</Chip><Chip>{ob.etaChanges.length} ETA changes</Chip><Chip tone="warn">{ob.missing.length} missing from file</Chip>
+            <span className="d-grow" />{applied ? <Chip tone="ok">Delta applied</Chip> : <Btn sm kind="primary" onClick={() => go("Stock", "orderbook")}>Review and apply delta</Btn>}
+          </div>}
+        </Card>
+        <div className="ar-navy">
+          <div className="d-row"><span className="d-eyebrow d-grow">Live tracker snapshot</span></div>
+          <div className="row"><span className="muted">Previous stock list:</span><span className="box">{ob.previousFile.replace(" (sample)", "")} ({ob.previousDate})</span></div>
+          <div className="row"><span className="muted">Current stock list:</span><span className="box" style={{ color: loaded ? "#7fe0a8" : undefined }}>{loaded ? `${ob.file.replace(" (sample)", "")} (${ob.date})` : "Waiting for this week's file"}</span></div>
+          <div className="row"><span className="muted">Total tracked units:</span><b style={{ textAlign: "right" }}>{d.active.length + d.sold.length}</b></div>
+          <div className="row"><span className="muted">SVO duplicates cleaned:</span><b style={{ textAlign: "right", color: "#f0c04b" }}>0</b></div>
+          <div className="d-row" style={{ marginTop: 12, fontSize: 11 }}><span className="muted d-grow">Sync active · sample data</span><button className="d-link" onClick={() => setHow(h => !h)}>How delta works?</button></div>
+          {how && <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0" }}>Each upload is matched to last week's by SVO and VIN. New rows become incoming units, changed dates update the ETA, and a row that disappears is flagged for review. It is never marked sold.</p>}
+        </div>
+      </div>
+
+      <div className="d-grid d-g4" style={{ marginBottom: 14 }}>
+        <Kpi label="In stock" mark="IN" value={d.onSite.length} hint={<span style={{ color: "var(--ok)" }}>Arrived on site</span>} onClick={() => { setView("onsite"); setFam("All"); }} />
+        <Kpi label="Due / incoming" mark="ETA" tone="warn" value={d.incoming.length} hint={<span style={{ color: "var(--warn)" }}>Future ETA</span>} onClick={() => { setView("incoming"); setFam("All"); }} />
+        <Kpi label="Sold vehicles" mark="€" tone="bad" value={d.sold.length} hint={<span style={{ color: "var(--bad)" }}>{soldYear} sold in 2026 (archive)</span>} onClick={() => { setView("sold"); setFam("All"); }} />
+        <Kpi label="Active stock value" mark="€" tone="ok" value={canSeeCost(s) ? eur(value) : "Hidden"} hint={canSeeCost(s) ? `Avg: ${eur(value / Math.max(1, d.active.length))}` : "role preview"} aside={canSeeCost(s) ? <span style={{ color: "var(--warn)" }}>Rebates: {eur(rebates)}</span> : undefined} />
+      </div>
+
+      <Card title={<>Stock Breakdown</>} aside={<div className="d-row">
+        <Btn sm className="amb" style={{ background: "var(--warn)", color: "#1b1406", borderColor: "transparent" }} onClick={() => setAdding(true)}>+ Add Vehicle Manually</Btn>
+        <input className="d-input" style={{ width: 230 }} placeholder="Search SVO, reg, job no., customer" value={q} onChange={e => setQ(e.target.value)} aria-label="Search stock" />
+        <select className="d-select" value={view} onChange={e => { setView(e.target.value as StockView); setFam("All"); }} aria-label="Stock filter">
+          <option value="all">All Active Stock</option><option value="onsite">In Stock (on site)</option><option value="incoming">Due / Incoming</option>
+          <option value="reserved">Reserved</option><option value="prep">In Preparation</option><option value="sold">Sold Archive</option>
+        </select></div>}>
+        <div className="d-divider" style={{ marginTop: 0 }} />
+        <div className="ar-pills">
+          <button className={"ar-pill " + (fam === "All" ? "on" : "")} onClick={() => setFam("All")}>All Models ({searched.length})</button>
+          {counts.map(([f, n]) => <button key={f} className={"ar-pill " + (fam === f ? "on" : "")} onClick={() => setFam(f)}>{f} ({n})</button>)}
+        </div>
+      </Card>
+
+      {view === "sold" ? (
+        <Card className="flush" style={{ marginTop: 16 }}>
           <Table rowKey={v => v.id} rows={rows} onRow={v => A.open("vehicle", v.id)} cols={[
             { key: "id", label: "Vehicle", render: v => <b>{v.id}</b>, sort: v => v.id },
             { key: "m", label: "Model", render: v => `${v.model} ${v.variant}` },
             { key: "b", label: "Buyer", render: v => <CLink id={v.sold?.buyer} /> },
-            { key: "a", label: "Sale value", num: true, render: v => eur(v.sold?.amount ?? 0), sort: v => v.sold?.amount ?? 0 },
+            { key: "a", label: "Sale value", num: true, render: v => canSeeCost(s) ? eur(v.sold?.amount ?? 0) : "—", sort: v => v.sold?.amount ?? 0 },
             { key: "d", label: "Date", render: v => fmtDate(v.sold!.date), sort: v => v.sold!.date },
             { key: "c", label: "Checklist", render: v => <div className="d-row" style={{ gap: 4 }}>{Object.entries(v.sold!.checklist).map(([k, ok]) => <button key={k} className={"d-chip " + (ok ? "ok" : "")} title="Toggle" onClick={e => { e.stopPropagation(); A.toggleChecklist(v.id, k); }}>{ok ? "✓ " : ""}{k}</button>)}</div> },
             { key: "r", label: "", render: v => <Btn sm kind="ghost" onClick={e => { e.stopPropagation(); setRestore({ id: v.id, reason: "" }); }}>Restore…</Btn> },
           ]} empty="No sold records match." />
-          <div className="d-row" style={{ padding: 12, borderTop: "1px solid var(--border)" }}><Btn sm onClick={() => csv("sold-report-sample.csv", [["Vehicle", "Model", "Buyer", "Amount", "Date"], ...d.sold.map(v => [v.id, `${v.model} ${v.variant}`, cname(v.sold?.buyer), v.sold?.amount ?? 0, v.sold?.date ?? ""])])}>Export report</Btn><Note>DMS transfer is simulated and never marked done automatically.</Note></div>
+          <div className="d-row" style={{ padding: 12, borderTop: "1px solid var(--border)" }}><Btn sm onClick={() => csv("sold-report-sample.csv", [["Vehicle", "Model", "Buyer", "Amount", "Date"], ...d.sold.map(v => [v.id, `${v.model} ${v.variant}`, cname(v.sold?.buyer), v.sold?.amount ?? 0, v.sold?.date ?? ""])])}>Export report</Btn><Note>Sold is always a confirmed state. DMS transfer is simulated and never ticked automatically.</Note></div>
         </Card>
-      ) : layout === "table" ? (
-        <Card className="flush"><Table rowKey={v => v.id} rows={rows} limit={15} onRow={v => A.open("vehicle", v.id)} cols={[
-          { key: "id", label: "Vehicle", render: v => <b>{v.id}</b>, sort: v => v.id },
-          { key: "m", label: "Model", render: v => `${v.model} ${v.variant}`, sort: v => v.model },
-          { key: "v", label: "VIN / SVO", render: v => <span className="d-mono">{v.vin ?? v.svo}</span> },
-          { key: "s", label: "Status", render: statusChip, sort: v => v.status },
-          { key: "sp", label: "Spec", render: specChip, sort: v => v.specStatus },
-          { key: "c", label: "Customer", render: v => <CLink id={v.customer ?? v.promisedTo} /> },
-          ...(canSeeCost(s) ? [{ key: "sc", label: "Standing cost", num: true, render: (v: Vehicle) => eur(standingCost(v)), sort: (v: Vehicle) => standingCost(v) }] : []),
-        ]} /></Card>
-      ) : ranges.map(r => {
-        const g = rows.filter(v => v.range === r);
+      ) : FAMILY_ORDER.map(f => {
+        const g = rows.filter(v => family(v) === f);
         if (!g.length) return null;
-        return <section key={r}>
-          <button className="group-head" onClick={() => setClosed({ ...closed, [r]: !closed[r] })} aria-expanded={!closed[r]}><b>{r}</b><Chip>{g.length}</Chip><span className="d-muted">{closed[r] ? "Show" : "Hide"}</span></button>
-          {!closed[r] && <div className="stock-grid">{g.map(v => <StockCard key={v.id} v={v} onEdit={() => setEdit(v)} onSell={() => setSell(v)} />)}</div>}
+        const [title, mark] = FAMILY_TITLE[f];
+        return <section key={f} className="ar-model">
+          <button className="ar-model-head" onClick={() => setClosed({ ...closed, [f]: !closed[f] })} aria-expanded={!closed[f]}>
+            <span className="ic">{mark}</span><span><b>{title}</b><small>{g.length} unit(s) currently tracked</small></span>
+            <span className="n">{g.length} Units</span><span aria-hidden style={{ width: 16, textAlign: "center" }}>{closed[f] ? "+" : "–"}</span>
+          </button>
+          {!closed[f] && <div className="ar-vgrid">{g.map(v => <TrackerCard key={v.id} v={v} onEdit={() => setEdit(v)} onSell={() => setSell(v)} />)}</div>}
         </section>;
       })}
-      {mode === "active" && !rows.length && <Empty>No vehicles match “{q}”.</Empty>}
+      {view !== "sold" && !rows.length && <div style={{ marginTop: 16 }}><Empty>No vehicles match{q ? ` “${q}”` : " this filter"}.</Empty></div>}
       {edit && <Portal><EditVehicle v={edit} close={() => setEdit(null)} /></Portal>}
       {sell && <Portal><SellDialog v={sell} close={() => setSell(null)} /></Portal>}
       {check && <Portal><StockCheckDrawer close={() => setCheck(false)} /></Portal>}
+      {backfill && !sell && <Portal><BackfillDialog close={() => setBackfill(false)} sell={setSell} /></Portal>}
+      {adding && <Portal><AddVehicleDialog close={() => setAdding(false)} /></Portal>}
       {restore && <Portal><div className="d-modal-scrim" onClick={() => setRestore(null)}><div className="d-modal" style={{ width: "min(460px,100%)" }} onClick={e => e.stopPropagation()}>
         <div className="d-drawer-body d-grid"><b style={{ fontSize: 17 }}>Restore {restore.id} to active stock</b>
           <Field label="Correction reason (required)"><input className="d-input" value={restore.reason} onChange={e => setRestore({ ...restore, reason: e.target.value })} placeholder="e.g. sale cancelled by customer" /></Field>

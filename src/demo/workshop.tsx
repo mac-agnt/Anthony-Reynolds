@@ -4,7 +4,7 @@ import {
   pname, techNow, techs, toMin, useDerived, vehicleLabel, type Interval, type State, type TechNow,
 } from "./store";
 import { ATTENDANCE, COMPANIES, FRIDAY_INTERNAL, FRIDAY_UNALLOC, ON_CALL, type Job } from "./fixtures";
-import { Portal, Avatar, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, JobChip, Metric, Note, NumInput, Page, Seg, Table, VLink, canSeeMoney } from "./ui";
+import { Portal, Avatar, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, JobChip, Kpi, Metric, Note, NumInput, Page, Plate, ReadDrop, Seg, Table, VLink, canSeeMoney } from "./ui";
 import { go } from "./nav";
 
 /* ---- timeline geometry: default 07:30–17:30 axis ------------------------- */
@@ -197,21 +197,53 @@ function suggest(s: State) {
   return out;
 }
 
+const isVor = (j: Job) => /^(VOR|Breakdown)/i.test(j.complaint);
+const jobKind = (j: Job) => isVor(j) ? "vor" : j.workType === "CVRT preparation" ? "cvrt" : j.workType === "Auto-electrical" ? "elec" : "";
+const JobTag = ({ j }: { j: Job }) => isVor(j) ? <Chip tone="bad">VOR urgent</Chip> : j.workType === "CVRT preparation" ? <Chip tone="ok">CVRT</Chip> : j.workType === "Auto-electrical" ? <Chip tone="warn">Auto-elec</Chip> : null;
+const hrsTxt = (min: number) => `${+(min / 60).toFixed(1)}h`;
+
+/* Job cards the simulated PDF reader produces, in turn. */
+const PDF_SAMPLES: { customer: string; vehicle: string; complaint: string; workType: Job["workType"]; minutes: number; file: string }[] = [
+  { customer: "c-midlands", vehicle: "C136", complaint: "VOR. Replace rear air suspension bellows and levelling valve", workType: "General workshop", minutes: 180, file: "WO-98501.pdf" },
+  { customer: "c-galway", vehicle: "C112", complaint: "12-week CVRT pre-check and brake roller test", workType: "CVRT preparation", minutes: 150, file: "WO-98502.pdf" },
+  { customer: "c-mayo", vehicle: "C120", complaint: "AdBlue dosing unit, NOx sensor and forced DPF regen", workType: "Auto-electrical", minutes: 240, file: "WO-98503.pdf" },
+  { customer: "c-shannon", vehicle: "C122", complaint: "Fridge carrier unit belt service", workType: "General workshop", minutes: 120, file: "WO-98504.pdf" },
+];
+let pdfTurn = 0;
+const readPdf = (name: string) => { const x = PDF_SAMPLES[pdfTurn++ % PDF_SAMPLES.length]; A.addParsedJob({ ...x, source: name }); };
+const PDF_STEPS = ["Reading PDF", "Finding registration and customer", "Extracting operations", "Estimating labour hours"];
+
+const TODAY = "2026-10-19";
+const shiftDate = (iso: string, n: number) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+
 export function Planner() {
   const [s, d] = useDerived();
   const [view, setView] = useState<"board" | "cards">("board");
+  const [date, setDate] = useState(TODAY);
   const [sel, setSel] = useState<Job | null>(null);
   const [tip, setTip] = useState<{ x: number; y: number; j: Job } | null>(null);
   const [dropRow, setDropRow] = useState<string | null>(null);
-  const [file, setFile] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [nj, setNj] = useState({ customer: "c-corrib", complaint: "", mins: 60 });
   const [sugs, setSugs] = useState<ReturnType<typeof suggest> | null>(null);
   const [reason, setReason] = useState("Allocated from hopper");
+  const [sim, setSim] = useState(0);
+  const isToday = date === TODAY;
   const present = techs.filter(t => !ATTENDANCE[t.id]);
-  const loaded = present.reduce((a, t) => a + blocksFor(s, t.id).reduce((x, b) => x + Math.max(0, Math.min(b.to, DAY_END) - Math.max(b.from, DAY_START)), 0), 0) / 60;
-  const avail = present.length * 8;
+  const loadOf = (id: string) => blocksFor(s, id).reduce((x, b) => x + Math.max(0, Math.min(b.to, DAY_END) - Math.max(b.from, DAY_START)), 0) / 60;
+  const dayH = (DAY_END - DAY_START - (BREAK[1] - BREAK[0])) / 60;
+  const loaded = isToday ? present.reduce((a, t) => a + loadOf(t.id), 0) : 0;
+  const avail = present.length * dayH;
+  const pct = avail ? (loaded / avail) * 100 : 0;
+  const scheduled = isToday ? s.jobs.filter(j => j.tech && (j.plannedStart || j.status === "in_progress")).length : 0;
+  const queueMin = d.hopper.reduce((a, j) => a + j.budgetMin, 0);
 
+  const autoLoad = () => {
+    const list = suggest(s);
+    if (!list.length) { A.toast("No feasible slot left today for the queued cards"); return; }
+    list.forEach(x => A.moveJob(x.job.id, x.tech, x.start, "Auto-loaded from the queue (earliest free slot)"));
+    setSugs(null);
+  };
   const onDrop = (e: DragEvent, tech: string) => {
     e.preventDefault(); setDropRow(null);
     const id = e.dataTransfer.getData("text/job"); if (!id) return;
@@ -221,85 +253,115 @@ export function Planner() {
   };
   return (
     <Page>
-      <Head title="Workshop Loading Planner" sub="Allocate the Job Card Hopper onto the technician grid. Scheduling a job creates a planned block — it never starts a clocking.">
-        <Chip>Mon 19 Oct</Chip>
-        <Seg value={view} onChange={setView} options={[["board", "Timeline Board"], ["cards", "Team Cards"]]} label="Planner view" />
+      <Head title="Workshop Loading Planner" sub="Load the job card queue onto the technician grid. Scheduling makes a planned block. It never clocks anyone on.">
+        <div className="ar-tools">
+          <label className="d-btn solid-bad" style={{ cursor: "pointer" }}><input type="file" hidden accept=".pdf" onChange={e => { const f = e.target.files?.[0]; if (f) { readPdf(f.name); e.target.value = ""; } }} />Drop / Upload Job Card PDF</label>
+          <Btn kind="primary" onClick={() => setAdding(true)}>+ New Job Card</Btn>
+          <Btn className="ok" onClick={autoLoad} disabled={!d.hopper.length || !isToday}>Auto-Load Queue</Btn>
+          <Btn onClick={() => { if (window.confirm("Reload the demo plan? This resets the whole demo to the 10:00 snapshot.")) A.reset(); }}>Demo Plan</Btn>
+          <Btn onClick={() => window.print()}>Print Sheet</Btn>
+          <Btn kind="ghost" onClick={() => { if (window.confirm("Move every planned (not started) job back to the hopper?")) A.clearDay(); }} disabled={!isToday}>Clear Day</Btn>
+        </div>
       </Head>
-      <div className="d-grid d-g4" style={{ marginBottom: 14 }}>
-        <Metric label="Capacity loaded" value={`${loaded.toFixed(1)} h`} hint={`of ${avail.toFixed(1)} h rostered (08:00–16:30)`} />
-        <Metric label="Spare assignable" value={`${Math.max(0, avail - loaded).toFixed(1)} h`} hint="planned capacity — not unclocked time" />
-        <Metric label="Unassigned jobs" value={d.hopper.length} tone={d.hopper.length ? "warn" : undefined} hint={`${d.queued.length} queued in total`} />
-        <Metric label="Available roster" value={`${present.length} / 15`} hint={`${d.counts.absent} absent · ${d.counts.training} training`} />
+
+      <div className="ar-ctl">
+        <div className="ar-date"><span className="d-eyebrow">Loading date</span>
+          <input className="d-input" type="date" value={date} onChange={e => setDate(e.target.value || TODAY)} aria-label="Loading date" />
+          <Btn sm kind="ghost" onClick={() => setDate(shiftDate(date, -1))} aria-label="Previous day">‹</Btn>
+          <Btn sm onClick={() => setDate(TODAY)}>Today</Btn>
+          <Btn sm kind="ghost" onClick={() => setDate(shiftDate(date, 1))} aria-label="Next day">›</Btn>
+        </div>
+        <Chip tone="acc">{scheduled} jobs scheduled</Chip>
+        <Chip tone="warn">{d.hopper.length} in queue</Chip>
+        <span className="d-grow" />
+        <span className="d-chip">Shift {hhmm(DAY_START)}–{hhmm(DAY_END)} · Break {hhmm(BREAK[0])}–{hhmm(BREAK[1])}</span>
+        <Seg value={view} onChange={setView} options={[["board", "Timeline Board"], ["cards", "Tech Cards"]]} label="Planner view" />
       </div>
+
+      <div className="d-grid d-g4" style={{ marginBottom: 14 }}>
+        <Kpi label="Workshop capacity loaded" mark="%" tone="bad" value={`${pct.toFixed(0)}%`} aside={<span className="d-mono">{loaded.toFixed(1)} / {avail.toFixed(1)} hrs</span>}>
+          <div className="ar-load"><span style={{ width: `${Math.min(100, pct)}%` }} /></div>
+        </Kpi>
+        <Kpi label="Spare capacity remaining" mark="h" tone="ok" value={Math.max(0, avail - loaded).toFixed(1)} unit="open hrs"
+          hint="Breaks auto-excluded" aside={canSeeMoney(s) ? <span className="d-chip acc">{eur(loaded * RATE)} planned · €{RATE}/hr</span> : undefined} />
+        <Kpi label="Unassigned job queue" mark="PDF" tone="warn" value={d.hopper.length} unit="job cards" hint="Drag cards onto any tech row"
+          aside={<span className="d-row" style={{ gap: 8 }}><span className="ar-hrs">{hrsTxt(queueMin)}</span><button className="d-link" style={{ color: "var(--bad)", fontWeight: 600 }} onClick={() => setSugs(suggest(s))} disabled={!d.hopper.length}>Auto-assign →</button></span>} />
+        <Kpi label="Workshop roster" mark="RO" value={present.length} unit="active bays" hint="Absence from the sample Bizimply report" aside={<span>{d.counts.absent} off · {d.counts.training} training</span>} />
+      </div>
+
       {view === "cards" ? <LiveTiles /> : (
-        <div className="d-side d-side-240">
-          <aside className="d-grid" style={{ gap: 10 }}>
-            <Card title={<>Job Card Hopper <span className="d-muted">({d.hopper.length})</span></>}>
-              <div className="d-grid" style={{ gap: 8 }}>
-                {d.hopper.map(j => (
-                  <div key={j.id} draggable onDragStart={e => e.dataTransfer.setData("text/job", j.id)} className="d-card" style={{ padding: 10, cursor: "grab", borderRadius: 12, background: sel?.id === j.id ? "var(--accent-faint)" : "var(--surface-2)" }}>
-                    <div className="d-row" style={{ gap: 6 }}><JLink id={j.id} /><span className="d-grow" /><span className="d-mono">{dur(j.budgetMin)}</span></div>
-                    <div style={{ fontWeight: 500, marginTop: 3 }}>{cname(j.customer)} · {vehicleLabel(s, j.vehicle).reg}</div>
-                    <div className="d-muted" style={{ fontSize: 11.5 }}>{j.complaint}</div>
-                    <div className="d-row" style={{ gap: 5, marginTop: 5 }}><Chip>{j.workType}</Chip>{j.blockers && <Chip tone="warn" title={j.blockers}>Blocker</Chip>}</div>
-                    <Btn sm style={{ marginTop: 7 }} onClick={() => setSel(j)}>Allocate…</Btn>
-                  </div>
-                ))}
-                {!d.hopper.length && <Empty>Hopper empty — every job has a technician.</Empty>}
-                <label className="d-empty" style={{ cursor: "pointer", padding: 12, fontSize: 11.5 }}
-                  onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) setFile(f.name); }}>
-                  <input type="file" hidden onChange={e => setFile(e.target.files?.[0]?.name ?? null)} />
-                  {file ? <>{file} — not parsed in the demo. Add the job manually below.</> : "Drop a job card / workshop order (sample)"}
-                </label>
-                {adding ? <div className="d-grid" style={{ gap: 6 }}>
-                  <select className="d-select" value={nj.customer} onChange={e => setNj({ ...nj, customer: e.target.value })}>{COMPANIES.filter(c => c.kind === "customer").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
-                  <input className="d-input" placeholder="Complaint / work" value={nj.complaint} onChange={e => setNj({ ...nj, complaint: e.target.value })} />
-                  <div className="d-row"><NumInput value={nj.mins} onChange={n => setNj({ ...nj, mins: n })} width={80} label="Minutes" /><span className="d-muted">min</span></div>
-                  <div className="d-row"><Btn sm onClick={() => setAdding(false)}>Cancel</Btn><Btn sm kind="primary" disabled={!nj.complaint.trim() || nj.mins <= 0} onClick={() => { A.addHopperJob(nj.customer, nj.complaint, nj.mins); setAdding(false); setNj({ ...nj, complaint: "" }); }}>Add</Btn></div>
-                </div> : <Btn onClick={() => setAdding(true)}>Add job</Btn>}
-                <Btn kind="ghost" onClick={() => setSugs(suggest(s))} disabled={!d.hopper.length}>Suggest allocation</Btn>
+        <div className="d-side" style={{ gridTemplateColumns: "280px minmax(0,1fr)" }}>
+          <aside className="ar-hopper">
+            <div className="ar-hopper-head">Job card hopper<span className="n">{d.hopper.length}</span></div>
+            <div className="d-grid" style={{ gap: 9, padding: 12 }}>
+              <ReadDrop red compact accept=".pdf" title="Drop job card PDF here" sub="or click to browse PDFs" steps={PDF_STEPS} onRead={readPdf} trigger={sim} sample={PDF_SAMPLES[pdfTurn % PDF_SAMPLES.length].file} />
+              <div className="d-row" style={{ gap: 6, flexWrap: "nowrap" }}>
+                <Btn sm className="d-grow" style={{ justifyContent: "center" }} onClick={() => setSim(n => n + 1)}>Simulate PDF Drop</Btn>
+                <Btn sm onClick={() => setAdding(a => !a)} aria-label="Add job card manually">+</Btn>
               </div>
-            </Card>
+              {adding && <div className="d-grid d-card" style={{ gap: 6, padding: 10, borderRadius: 12 }}>
+                <select className="d-select" value={nj.customer} onChange={e => setNj({ ...nj, customer: e.target.value })} aria-label="Customer">{COMPANIES.filter(c => c.kind === "customer").map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+                <input className="d-input" placeholder="Work required" value={nj.complaint} onChange={e => setNj({ ...nj, complaint: e.target.value })} aria-label="Work required" />
+                <div className="d-row"><NumInput value={nj.mins} onChange={n => setNj({ ...nj, mins: n })} width={80} label="Minutes" /><span className="d-muted">min</span></div>
+                <div className="d-row"><Btn sm onClick={() => setAdding(false)}>Cancel</Btn><Btn sm kind="primary" disabled={!nj.complaint.trim() || nj.mins <= 0} onClick={() => { A.addHopperJob(nj.customer, nj.complaint, nj.mins); setAdding(false); setNj({ ...nj, complaint: "" }); }}>Add to hopper</Btn></div>
+              </div>}
+              {[...d.hopper].sort((a, b) => +isVor(b) - +isVor(a)).map(j => (
+                <button key={j.id} draggable onDragStart={e => e.dataTransfer.setData("text/job", j.id)} onClick={() => setSel(j)}
+                  className={"ar-hop " + (isVor(j) ? "vor " : "") + (sel?.id === j.id ? "sel" : "")} aria-label={`Allocate ${j.id}`}>
+                  <div className="d-row" style={{ gap: 6, flexWrap: "nowrap" }}><Plate reg={vehicleLabel(s, j.vehicle).reg} /><span className="d-grow" /><JobTag j={j} /><span className={"ar-hrs " + (isVor(j) ? "bad" : j.workType === "CVRT preparation" ? "ok" : "")}>{hrsTxt(j.budgetMin)}</span></div>
+                  <b style={{ fontSize: 13 }}>{cname(j.customer)}</b>
+                  <span className="d-muted" style={{ fontSize: 11.5 }}>{j.complaint}</span>
+                  {j.blockers && <span style={{ fontSize: 11, color: "var(--warn)" }}>Blocker: {j.blockers}</span>}
+                  <div className="foot"><span>Drag to timeline</span><span className="d-mono">{j.id}</span></div>
+                </button>
+              ))}
+              {!d.hopper.length && <Empty>Hopper empty. Every job has a technician.</Empty>}
+            </div>
           </aside>
           <div className="d-grid" style={{ gap: 10, minWidth: 0 }}>
-            {sugs && <Card title="Suggested allocation (review before accepting)" aside={<Btn sm kind="ghost" onClick={() => setSugs(null)}>Dismiss</Btn>}>
+            {sugs && <Card title="Suggested allocation (review before accepting)" aside={<div className="d-row"><Btn sm kind="primary" onClick={autoLoad}>Accept all</Btn><Btn sm kind="ghost" onClick={() => setSugs(null)}>Dismiss</Btn></div>}>
               {sugs.length ? <div className="d-list">{sugs.filter(x => s.jobs.find(j => j.id === x.job.id)?.hopper).map(x => <div className="d-li" key={x.job.id}><JLink id={x.job.id} /><span className="d-grow d-muted">→ {pname(x.tech)} at {hhmm(x.start)} (earliest free, eligible technician)</span><Btn sm kind="primary" onClick={() => A.moveJob(x.job.id, x.tech, x.start, "Accepted suggested allocation")}>Accept</Btn></div>)}</div> : <Empty>No feasible slot found today.</Empty>}
-              <Note>A simple earliest-free-slot rule respecting attendance, work type and overlaps — not an optimiser.</Note>
+              <Note>Earliest free slot that respects attendance, work type and overlaps. A rule, not an optimiser.</Note>
             </Card>}
-            {sel && <Card title={<>Allocate {sel.id} <span className="d-muted">— accessible alternative to dragging</span></>} aside={<Btn sm kind="ghost" onClick={() => setSel(null)}>Close</Btn>}>
+            {sel && <Card title={<>Allocate {sel.id} <span className="d-muted">(keyboard alternative to dragging)</span></>} aside={<Btn sm kind="ghost" onClick={() => setSel(null)}>Close</Btn>}>
               <AllocateForm job={sel} reason={reason} setReason={setReason} onDone={() => setSel(null)} />
             </Card>}
-            <div className="tl"><div className="tl-scroll"><div className="tl-inner" style={{ width: 168 + TRACK }}>
-              <Axis />
-              {techs.map(t => {
-                const blocks = blocksFor(s, t.id); const att = ATTENDANCE[t.id];
-                const load = blocks.reduce((x, b) => x + Math.max(0, Math.min(b.to, DAY_END) - Math.max(b.from, DAY_START)), 0) / 60;
-                return (
-                  <div className="tl-row" key={t.id}>
-                    <div className="tl-name"><b>{t.name}</b><span>{att ? (att === "absent" ? "Absent" : "Training") : `${load.toFixed(1)} h loaded · ${Math.max(0, 8 - load).toFixed(1)} h free`}</span></div>
-                    <div className={"tl-track " + (dropRow === t.id ? "tl-drop" : "")} style={{ width: TRACK, opacity: att ? .45 : 1 }}
-                      onDragOver={e => { if (!att) { e.preventDefault(); setDropRow(t.id); } }} onDragLeave={() => setDropRow(null)} onDrop={e => onDrop(e, t.id)}>
-                      <TrackBg now={s.clock} />
-                      {att === "training" && <div className="tl-bar training" style={{ left: X(DAY_START), width: W(DAY_START, DAY_END) }}><b>Off-site training (approved)</b></div>}
-                      {blocks.map(b => {
-                        const pct = elapsed(b.job, s.clock) / b.job.budgetMin * 100;
-                        return <button key={b.job.id} className={`tl-bar ${wtClass(b.job)} ${b.live ? (pct >= s.rules.warn ? "over" : "live") : ""}`} style={{ left: X(b.from), width: W(b.from, b.to) }}
-                          draggable={!b.live} onDragStart={e => e.dataTransfer.setData("text/job", b.job.id)}
-                          onMouseEnter={e => setTip({ x: e.clientX, y: e.clientY, j: b.job })} onMouseLeave={() => setTip(null)}
-                          onFocus={e => { const r = e.currentTarget.getBoundingClientRect(); setTip({ x: r.left, y: r.bottom, j: b.job }); }} onBlur={() => setTip(null)}
-                          onClick={() => b.live ? A.open("job", b.job.id) : setSel(b.job)} aria-label={`${b.job.id} ${hhmm(b.from)} to ${hhmm(b.to)}`}>
-                          <b>{vehicleLabel(s, b.job.vehicle).reg} · {cname(b.job.customer)}</b><span>{dur(b.job.budgetMin)} · {b.job.complaint}</span>
-                        </button>;
-                      })}
+            <div className="tl">
+              <div className="ar-canvas-head"><b>Daily Technician Loading Timeline ({hhmm(AX0)} – {hhmm(AX1)})</b><span className="d-grow" />
+                <div className="ar-legend"><span><i />Standard job</span><span><i className="vor" />VOR / urgent</span><span><i className="cvrt" />CVRT / inspection</span><span><i className="elec" />Auto-electrical</span><span><i className="brk" />Break</span></div></div>
+              <div className="tl-scroll"><div className="tl-inner" style={{ width: 168 + TRACK }}>
+                <Axis />
+                {techs.map(t => {
+                  const blocks = isToday ? blocksFor(s, t.id) : []; const att = ATTENDANCE[t.id];
+                  const load = isToday ? loadOf(t.id) : 0;
+                  return (
+                    <div className="tl-row" key={t.id}>
+                      <div className="tl-name"><b><span className="dot" style={{ background: att ? "var(--warn)" : "var(--ok)" }} />{t.name}</b>
+                        {att ? <span>{att === "absent" ? "Absent" : "Training"}</span> : <span><span className={"ar-free " + (load >= dayH ? "none" : "")}>{load.toFixed(1)}h / {Math.max(0, dayH - load).toFixed(1)}h free</span></span>}</div>
+                      <div className={"tl-track " + (dropRow === t.id ? "tl-drop" : "")} style={{ width: TRACK, opacity: att ? .45 : 1 }}
+                        onDragOver={e => { if (!att && isToday) { e.preventDefault(); setDropRow(t.id); } }} onDragLeave={() => setDropRow(null)} onDrop={e => onDrop(e, t.id)}>
+                        <TrackBg now={isToday ? s.clock : undefined} />
+                        {att === "training" && isToday && <div className="tl-bar training" style={{ left: X(DAY_START), width: W(DAY_START, DAY_END) }}><b>Off-site training (approved)</b></div>}
+                        {blocks.map(b => {
+                          const used = elapsed(b.job, s.clock) / b.job.budgetMin * 100;
+                          return <button key={b.job.id} className={`tl-bar ar ${jobKind(b.job)} ${b.live ? (used >= s.rules.warn ? "over" : "live") : ""}`} style={{ left: X(b.from), width: W(b.from, b.to) }}
+                            draggable={!b.live} onDragStart={e => e.dataTransfer.setData("text/job", b.job.id)}
+                            onMouseEnter={e => setTip({ x: e.clientX, y: e.clientY, j: b.job })} onMouseLeave={() => setTip(null)}
+                            onFocus={e => { const r = e.currentTarget.getBoundingClientRect(); setTip({ x: r.left, y: r.bottom, j: b.job }); }} onBlur={() => setTip(null)}
+                            onClick={() => b.live ? A.open("job", b.job.id) : setSel(b.job)} aria-label={`${b.job.id} ${hhmm(b.from)} to ${hhmm(b.to)}`}>
+                            {W(b.from, b.to) > 150 && <Plate reg={vehicleLabel(s, b.job.vehicle).reg} />}
+                            <span className="t"><b>{cname(b.job.customer)}</b><span>{b.job.complaint}</span></span>
+                            {W(b.from, b.to) > 90 && <span className={"ar-hrs " + (isVor(b.job) ? "bad" : "")}>{hrsTxt(b.job.budgetMin)}</span>}
+                          </button>;
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div></div></div>
-            <div className="d-row" style={{ gap: 14 }}>
-              {[["", "General workshop"], ["cvrt", "CVRT preparation"], ["elec", "Auto-electrical"]].map(([c, l]) => <span key={l} className="d-row" style={{ gap: 6 }}><i className={"tl-bar " + c} style={{ position: "static", display: "inline-block", width: 18, height: 10, padding: 0 }} /><span className="d-muted">{l}</span></span>)}
-              <span className="d-muted">Left accent = clocked on now · hatched = break · line = current time</span>
+                  );
+                })}
+              </div></div>
             </div>
+            {!isToday && <Note>No jobs are planned for {fmtDay(date)} in the demo. The loaded plan is Monday 19 October. <button className="d-link" onClick={() => setDate(TODAY)}>Back to today</button></Note>}
+            {isToday && <Note>Left accent = clocked on now. The line marks the current time. Hover a block for detail; click a planned block to move it.</Note>}
           </div>
         </div>
       )}
@@ -307,6 +369,7 @@ export function Planner() {
     </Page>
   );
 }
+const fmtDay = (iso: string) => new Date(iso + "T12:00:00").toLocaleDateString("en-IE", { weekday: "long", day: "numeric", month: "long" });
 
 function AllocateForm({ job, reason, setReason, onDone }: { job: Job; reason: string; setReason: (r: string) => void; onDone: () => void }) {
   const [s] = useDerived();
@@ -361,12 +424,20 @@ export function Clocking() {
   };
   return (
     <Page>
-      <Head title="Technician Clockings" sub={day === "fri" ? "Friday 16 October — complete day. Retrospective view of the sample AssetMinder export." : `Monday 19 October — partial day to ${hhmm(s.clock)}. Not comparable with Friday's full day.`}>
-        <Seg value={day} onChange={v => { setDay(v); setPick(null); }} options={[["fri", "Fri 16 Oct · complete"], ["mon", `Mon 19 Oct · to ${hhmm(s.clock)}`]]} label="Day" />
-        <Seg value={view} onChange={setView} options={[["timeline", "Timeline"], ["matrix", "Matrix"]]} label="View" />
-        <Btn onClick={() => A.toast("Sample AssetMinder export is already the loaded source — nothing new to import")}>Sample import</Btn>
-        <Btn onClick={exportCsv}>Export CSV</Btn><Btn kind="ghost" onClick={() => window.print()}>Print</Btn>
+      <Head title="Technician Clockings Visualiser" sub={day === "fri" ? "Friday 16 October, complete day. Retrospective view of the sample AssetMinder export." : `Monday 19 October, partial day to ${hhmm(s.clock)}. Not comparable with Friday's full day.`}>
+        <div className="ar-tools">
+          <label className="d-btn solid-bad" style={{ cursor: "pointer" }}><input type="file" hidden accept=".xlsx,.xls,.csv" onChange={e => { const f = e.target.files?.[0]; if (f) { A.toast(`${f.name} read. The sample AssetMinder export stays on screen (files aren't parsed in the demo)`); setDay("fri"); e.target.value = ""; } }} />Upload Excel (.xlsx)</label>
+          <Btn onClick={() => { setDay("fri"); setPick(null); A.toast("Demo data: Friday 16 October sample export"); }}>Demo Data</Btn>
+          <Btn kind="primary" onClick={() => window.print()}>Print / PDF</Btn>
+          <Btn onClick={exportCsv}>Export CSV</Btn>
+          <Btn kind="ghost" disabled={!Object.keys(s.fridayReviews).length} onClick={() => { if (window.confirm("Clear every gap classification and go back to the raw export?")) { Object.keys(s.fridayReviews).forEach(id => A.undoFriday(id)); setPick(null); } }}>Reset</Btn>
+        </div>
       </Head>
+      <div className="ar-ctl">
+        <Seg value={day} onChange={v => { setDay(v); setPick(null); }} options={[["fri", "Fri 16 Oct · complete"], ["mon", `Mon 19 Oct · to ${hhmm(s.clock)}`]]} label="Day" />
+        <Seg value={view} onChange={setView} options={[["timeline", "Canvas"], ["matrix", "Matrix"]]} label="View" />
+        <span className="d-grow" /><span className="d-muted">Click a gap to classify it. Click a job to open it.</span>
+      </div>
       <div className="d-grid d-g4" style={{ marginBottom: 14 }}>
         <div title={`Job-allocated hours ÷ (attendance − approved breaks) = ${sum.job.toFixed(1)} ÷ (${sum.att.toFixed(1)} − ${sum.brk.toFixed(1)}). Internal work stays in the denominator.`}>
           <Metric label="Job allocation rate" value={(rate * 100).toFixed(1) + "%"} hint={`${sum.job.toFixed(1)} h ÷ (${sum.att.toFixed(1)} − ${sum.brk.toFixed(1)}) h · hover for formula`} /></div>
@@ -384,21 +455,29 @@ export function Clocking() {
       </Card>}
       <div className={pick ? "d-side d-side-r300" : "d-grid"}>
         {view === "timeline" ? (
-          <div className="tl"><div className="tl-scroll"><div className="tl-inner" style={{ width: 168 + TRACK }}>
+          <div className="tl">
+            <div className="ar-canvas-head"><b>Daily Mechanic Clockings Canvas ({hhmm(AX0)} – {hhmm(AX1)})</b><span className="d-grow" />
+              <div className="ar-legend"><span><i style={{ borderColor: "#4cb4e6" }} />Job clocked</span><span><i className="miss" />{day === "mon" ? "Open (live)" : "Missing clock-off"}</span><span><i className="gap" />Unclocked gap</span><span><i className="brk" />Break</span></div></div>
+            <div className="tl-scroll"><div className="tl-inner" style={{ width: 168 + TRACK }}>
             <Axis />
             {techs.map(t => {
               const iv = intervalsFor(s, day, t.id); const r = rowTotals(s, day, t.id); const att = day === "mon" ? ATTENDANCE[t.id] : undefined;
               return <div className="tl-row" key={t.id}>
-                <div className="tl-name"><b>{t.name}</b><span style={{ color: r.gap > 0 ? "var(--bad)" : undefined }}>{att === "absent" ? "Absent" : r.gap > 0 ? `${dur(r.gap * 60)} unexplained` : "No unexplained gaps"}</span></div>
+                <div className="tl-name ck"><b>{t.name}</b>{att === "absent" ? <span className="ck-badge off">Absent</span> : att === "training" ? <span className="ck-badge vio">Training</span>
+                  : r.gap > 0 ? <span className="ck-badge" title="Unexplained gap time">{dur(Math.round(r.gap * 60))}</span> : <span className="ck-badge ok">No gaps</span>}</div>
                 <div className="tl-track" style={{ width: TRACK }}>
                   <TrackBg now={day === "mon" ? s.clock : undefined} />
                   {iv.map((x, i) => {
                     const rev = x.gapId ? s.fridayReviews[x.gapId] : undefined;
-                    const cls = x.kind === "gap" ? "gap" + (rev ? " reviewed" : "") : x.kind === "break" ? "breakbar" : x.kind === "running" ? "running live" : x.kind;
-                    return <button key={i} className={"tl-bar " + cls} style={{ left: X(x.from), width: W(x.from, x.to) }} disabled={x.kind === "break"}
+                    const cls = x.kind === "gap" ? "gap ck2" + (rev ? " reviewed" : "") : x.kind === "break" ? "breakbar" : x.kind === "running" ? "ck open" : x.kind === "training" ? "training" : x.kind === "internal" ? "ck internal" : "ck";
+                    const w = W(x.from, x.to);
+                    const [reg, who] = (x.label ?? "").includes(" · ") ? x.label!.split(" · ") : ["", x.label ?? ""];
+                    const time = `${hhmm(x.from)} - ${x.kind === "running" ? "Open" : hhmm(x.to)}`;
+                    return <button key={i} className={"tl-bar " + cls} style={{ left: X(x.from), width: w }} disabled={x.kind === "break"} title={x.kind === "gap" ? `Gap ${dur(x.to - x.from)}, ${time}` : `${x.label ?? ""} ${time}`}
                       onClick={() => x.jobId ? A.open("job", x.jobId) : x.kind !== "break" ? setPick({ tech: t.id, iv: x }) : undefined} aria-label={`${x.kind} ${hhmm(x.from)}–${hhmm(x.to)}`}>
-                      {x.kind === "gap" ? <><b>{dur(x.to - x.from)}</b><span>{rev ? `Reviewed: ${rev.cls}` : "Unexplained"}</span></>
-                        : x.kind === "break" ? null : <><b>{x.label}</b><span>{hhmm(x.from)}–{x.kind === "running" ? "now" : hhmm(x.to)}</span></>}
+                      {x.kind === "gap" ? (w > 44 ? `Gap ${dur(x.to - x.from)}` : w > 16 ? "G" : null)
+                        : x.kind === "break" ? null : x.kind === "training" ? <b>{x.label}</b>
+                        : <>{reg && w > 200 && <Plate reg={reg} />}{w > 120 && <span className="t" style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{who}</span>}{w > 46 && <span className="tm">{w > 90 ? time : hhmm(x.from)}</span>}</>}
                     </button>;
                   })}
                 </div>
@@ -463,18 +542,24 @@ export function JobCards() {
   const [s, d] = useDerived();
   const jobId = s.focus.job ?? "JOB-1041";
   const setJobId = (id: string) => A.focus("job", id);
-  const [mode, setMode] = useState<"source" | "writeup" | "review">("review");
+  const [mode, setMode] = useState<"source" | "writeup" | "review">("source");
   const job = s.jobs.find(j => j.id === jobId)!;
   const jc = cardFor(s, jobId);
   const facts = JOB_CARD_FACTS[jobId];
   const listJobs = [...d.completed, ...d.awaitingQc, ...d.inProgress.slice(0, 3), ...d.hopper];
   const rows = jc.rows.map(r => { const unit = r.basis === "oem" ? r.oem : r.basis === "haynes" ? r.haynes : r.manual; const hours = unit * r.qty; return { ...r, unit, hours, labour: hours * RATE }; });
-  const est = { hours: rows.reduce((a, r) => a + r.hours, 0), labour: rows.reduce((a, r) => a + r.labour, 0), parts: rows.reduce((a, r) => a + r.parts * r.qty, 0) };
+  const [rate, setRate] = useState(RATE);
+  const [sur, setSur] = useState(5);
+  const [vat, setVat] = useState(13.5);
+  const std = rows.length && rows.every(r => r.basis === rows[0].basis) ? rows[0].basis : "manual";
+  const hours = rows.reduce((a, r) => a + r.hours, 0), labour = hours * rate, parts = rows.reduce((a, r) => a + r.parts * r.qty, 0);
+  const surcharge = labour * sur / 100, net = labour + parts + surcharge;
+  const est = { hours, labour, parts, surcharge, net, vat: net * vat / 100 };
   const answered = facts ? facts.questions.every((_, i) => jc.answers[i]) : true;
   return (
     <Page>
       <Head title="Job Cards" sub="One job record, three modes: estimate the work, write up what was actually done, then review. Estimates never become performed work.">
-        <Seg value={mode} onChange={setMode} options={[["source", "Source & Estimate"], ["writeup", "Work Write-up"], ["review", "Review"]]} label="Mode" />
+        <Seg value={mode} onChange={setMode} options={[["source", "FleetTime Estimate"], ["writeup", "Work Write-up"], ["review", "Review"]]} label="Mode" />
       </Head>
       <div className="d-side d-side-250">
         <Card className="flush" title={undefined}>
@@ -492,41 +577,60 @@ export function JobCards() {
           </Card>
 
           {mode === "source" && <>
-            <Card title="Source document">
+            <Card>
               <div className="d-row">
-                <label className="d-btn" style={{ cursor: "pointer" }}><input type="file" hidden onChange={e => { const f = e.target.files?.[0]; if (f) A.noteFile(jobId, f.name); }} />Attach job card / inspection sheet</label>
-                <Btn kind="primary" onClick={() => A.loadSample(jobId)}>Load sample job card</Btn>
-                <span className="d-muted">{jc.sourceFile || "No source attached yet"}</span>
+                <div className="d-grow"><b style={{ fontSize: 15 }}>FleetTime Estimator</b> <Chip tone="acc">Pro</Chip><div className="d-muted" style={{ fontSize: 11.5 }}>Read a job card, price it against OEM or Haynes times, print it.</div></div>
+                <div className="ar-settings">
+                  <span className="ar-set">Rate: €<NumInput value={rate} onChange={setRate} width={74} step={5} label="Labour rate per hour" />/hr</span>
+                  <span className="ar-set">Surcharge:<select className="d-select" value={sur} onChange={e => setSur(+e.target.value)} aria-label="Surcharge">{[[0, "None"], [5, "5% (Shop)"], [10, "10% (Shop)"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></span>
+                  <span className="ar-set">VAT:<select className="d-select" value={vat} onChange={e => setVat(+e.target.value)} aria-label="VAT rate">{[[0, "Not applied"], [13.5, "13.5% (Services)"], [23, "23% (Standard)"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></span>
+                  <Btn kind="primary" onClick={() => window.print()}>Print / PDF</Btn>
+                </div>
               </div>
             </Card>
-            <Card title="Labour estimate" aside={<span className="d-row" style={{ gap: 8 }}>
-              <span className="d-muted">Demo rate €{RATE}/h</span>
-              <span className="d-muted">Surcharge €</span><NumInput value={jc.surcharge} onChange={n => A.setSurcharge(jobId, n)} width={80} label="Surcharge" />
-              <Chip title="No tax rate configured in the demo">Tax: not configured · excluded</Chip></span>}>
+            <ReadDrop accept=".pdf,image/*" title="Drop a job card, inspection sheet, or workshop order here" sub="PDFs and photographed job sheets. The demo shows a sample read, it doesn't run OCR." button="Browse Local File"
+              steps={["Reading the document", "Finding vehicle and complaint", "Splitting into operations", "Matching OEM and Haynes times"]}
+              onRead={() => A.loadSample(jobId)} />
+            <Card className="flush">
+              <div className="d-row" style={{ padding: "14px 16px 10px" }}>
+                <div className="d-grow"><div className="d-row" style={{ gap: 8 }}><b style={{ fontSize: 15 }}>Commercial Labour &amp; Cost Breakdown</b><Chip tone="acc">{rows.length} {rows.length === 1 ? "Job" : "Jobs"}</Chip></div>
+                  <div className="d-muted" style={{ fontSize: 11.5, marginTop: 2, textTransform: "uppercase" }}>{vehicleLabel(s, job.vehicle).model} • {vehicleLabel(s, job.vehicle).reg} • {cname(job.customer)} • {job.id}</div></div>
+                <span className="ar-set">Standard:<Seg value={std} onChange={v => rows.forEach(r => A.editRow(jobId, r.id, { basis: v }))} options={[["oem", "OEM (Default)"], ["haynes", "Haynes Pro"], ["manual", "Manual"]]} label="Labour time standard" /></span>
+              </div>
               {rows.length ? (
-                <div className="d-scroll"><table className="d-table">
-                  <thead><tr><th>Operation</th><th>Note</th><th className="num">OEM ref (sample)</th><th className="num">Haynes ref (sample)</th><th>Basis</th><th className="num">Unit h</th><th className="num">Qty</th><th className="num">Total h</th><th className="num">Parts €</th><th className="num">Labour €</th><th /></tr></thead>
-                  <tbody>{rows.map(r => (
+                <div className="d-scroll"><table className="d-table ar-est">
+                  <thead><tr><th style={{ minWidth: 300 }}>Operation &amp; context</th><th className="num">OEM std</th><th className="num">Haynes</th><th className="num">Unit (h)</th><th className="num">Qty</th><th className="num">Total (h)</th><th className="num">Parts €</th><th className="num">Labour</th><th /></tr></thead>
+                  <tbody>{rows.map((r, i) => (
                     <tr key={r.id}>
-                      <td><input className="d-input edit" style={{ width: 200 }} value={r.op} onChange={e => A.editRow(jobId, r.id, { op: e.target.value })} aria-label="Operation" /></td>
-                      <td><input className="d-input edit" style={{ width: 120 }} value={r.note} onChange={e => A.editRow(jobId, r.id, { note: e.target.value })} aria-label="Note" /></td>
-                      <td className="num">{r.oem.toFixed(1)}</td><td className="num">{r.haynes.toFixed(1)}</td>
-                      <td><select className="d-select" value={r.basis} onChange={e => A.editRow(jobId, r.id, { basis: e.target.value as "oem" })} aria-label="Time basis"><option value="oem">OEM</option><option value="haynes">Haynes</option><option value="manual">Manual</option></select></td>
-                      <td className="num">{r.basis === "manual" ? <NumInput value={r.manual} step={0.1} width={70} onChange={n => A.editRow(jobId, r.id, { manual: n })} label="Unit hours" /> : r.unit.toFixed(1)}</td>
+                      <td><div className="d-row" style={{ gap: 6, flexWrap: "nowrap" }}><span className="d-faint d-mono">{i + 1}.</span><input className="op" value={r.op} onChange={e => A.editRow(jobId, r.id, { op: e.target.value })} aria-label="Operation" /></div>
+                        <div className="d-row" style={{ gap: 6, alignItems: "flex-start", flexWrap: "nowrap", marginTop: 3 }}><b style={{ fontSize: 12 }}>Correction:</b><textarea className="corr" rows={2} value={r.note} placeholder="What was found and done" onChange={e => A.editRow(jobId, r.id, { note: e.target.value })} aria-label="Correction notes" /></div></td>
+                      <td className="num"><button className={"ar-std " + (r.basis === "oem" ? "on" : "")} onClick={() => A.editRow(jobId, r.id, { basis: "oem" })} title="Use OEM time (sample)">{r.oem.toFixed(1)}h</button></td>
+                      <td className="num"><button className={"ar-std " + (r.basis === "haynes" ? "on" : "")} onClick={() => A.editRow(jobId, r.id, { basis: "haynes" })} title="Use Haynes time (sample)">{r.haynes.toFixed(1)}h</button></td>
+                      <td className="num"><NumInput value={r.unit} step={0.1} width={70} onChange={n => A.editRow(jobId, r.id, { basis: "manual", manual: n })} label="Unit hours" /></td>
                       <td className="num"><NumInput value={r.qty} width={56} onChange={n => A.editRow(jobId, r.id, { qty: n })} label="Quantity" /></td>
-                      <td className="num">{r.hours.toFixed(1)}</td>
-                      <td className="num"><NumInput value={r.parts} width={80} onChange={n => A.editRow(jobId, r.id, { parts: n })} label="Parts" /></td>
-                      <td className="num">{eur(r.labour)}</td>
-                      <td><Btn sm kind="ghost" onClick={() => A.removeRow(jobId, r.id)} aria-label="Remove row">✕</Btn></td>
+                      <td className="num" style={{ color: "var(--accent)", fontWeight: 700 }}>{r.hours.toFixed(2)}h</td>
+                      <td className="num"><NumInput value={r.parts} width={86} onChange={n => A.editRow(jobId, r.id, { parts: n })} label="Parts" /></td>
+                      <td className="num" style={{ fontWeight: 700 }}>{eur(r.hours * rate)}</td>
+                      <td><Btn sm kind="ghost" onClick={() => A.removeRow(jobId, r.id)} aria-label="Remove operation">✕</Btn></td>
                     </tr>))}</tbody>
                 </table></div>
-              ) : <Empty>Load the sample job card or add an operation to build the estimate.</Empty>}
-              <div className="d-row" style={{ marginTop: 10 }}><Btn sm onClick={() => A.addRow(jobId)}>Add operation</Btn></div>
+              ) : <div style={{ padding: "0 16px 14px" }}><Empty>Drop a job card above, or add an operation, to build the estimate.</Empty></div>}
+              <div className="d-row" style={{ padding: "10px 16px 14px" }}><Btn sm onClick={() => A.addRow(jobId)}>+ Add operation</Btn><span className="d-muted">{jc.sourceFile || "No source attached yet"}</span></div>
             </Card>
             <div className="d-grid d-g2">
-              <Card title="Estimate totals"><dl className="d-kv"><dt>Hours</dt><dd>{est.hours.toFixed(1)} h</dd><dt>Labour</dt><dd>{eur(est.labour)}</dd><dt>Parts</dt><dd>{eur(est.parts)}</dd><dt>Surcharge</dt><dd>{eur(jc.surcharge)}</dd><dt><b>Estimated total</b></dt><dd><b>{eur(est.labour + est.parts + jc.surcharge)}</b> <span className="d-faint">excl. tax</span></dd></dl></Card>
+              <Card title="Estimate totals">
+                <dl className="ar-tot">
+                  <dt>Labour ({est.hours.toFixed(2)} h × €{rate})</dt><dd>{eur(est.labour)}</dd>
+                  <dt>Parts</dt><dd>{eur(est.parts)}</dd>
+                  <dt>Shop surcharge ({sur}% of labour)</dt><dd>{eur(est.surcharge)}</dd>
+                  <dt>Net</dt><dd>{eur(est.net)}</dd>
+                  <dt>VAT {vat ? `${vat}%` : "(not applied)"}</dt><dd>{eur(est.vat)}</dd>
+                  <dt className="grand">Total</dt><dd className="grand">{eur(est.net + est.vat)}</dd>
+                </dl>
+                <Note>Illustrative rates and VAT for the demo. Check the rate card before quoting.</Note>
+              </Card>
               <Card title="Actual (job record)">{facts && job.net !== undefined ? <dl className="d-kv"><dt>Labour</dt><dd>{facts.labourHours} h × €{RATE} = {eur(facts.labourHours * RATE)}</dd><dt>Parts</dt><dd>{eur(facts.partsNet)}</dd><dt><b>Net draft value</b></dt><dd><b>{eur(job.net)}</b></dd></dl> : <span className="d-muted">No actual time recorded yet. Clocked time: {elapsed(job, s.clock)} min.</span>}
-                <Note>Estimated, actual and billable figures are kept separate. Editing the estimate never rewrites actual time or the approved record.</Note></Card>
+                <Note>Estimate, actual and billable figures stay separate. Editing the estimate never rewrites actual time or the approved record.</Note></Card>
             </div>
           </>}
 

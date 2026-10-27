@@ -73,22 +73,23 @@ export const STAFF: Person[] = [
   P("p-s6", "Gavin Tuohy", "Sales administrator", "Sales", "support", "gavin.tuohy@example.com", false, "GT", "#9fd6f0"),
   P("p-s7", "Michelle Nerney", "CVRT administrator", "CVRT", "support", "michelle.nerney@example.com", false, "MN", "#7fd8a4"),
   P("p-s8", "Brian Costello", "Reception", "Management", "support", "brian.costello@example.com", false, "BC", "#e6c78a"),
-  // Fifteen technicians. Billy is named in the call; his jobs and figures are fictional.
+  // Fifteen technicians. Billy, Edgar, Cian, Gennadiy, JJ and Ron match the names on
+  // Anthony's existing planner and clocking tools; their jobs and figures are fictional.
   P("t-billy", "Billy", "HGV technician", "Workshop", "technician", "billy@example.com", false, "BE", "#6C8CFF", "Billy Elliott"),
-  P("t-sean", "Seán Doyle", "HGV technician", "Workshop", "technician", "sean.doyle@example.com", false, "SD", "#6ad0f0"),
-  P("t-rachel", "Rachel Byrne", "Auto-electrician", "Workshop", "technician", "rachel.byrne@example.com", false, "RB", "#5fe0a8"),
-  P("t-conor", "Conor Keane", "LCV technician", "Workshop", "technician", "conor.keane@example.com", false, "CK", "#f0c04b"),
-  P("t-mark", "Mark Timlin", "HGV technician", "Workshop", "technician", "mark.timlin@example.com", false, "MT", "#e2a08c"),
-  P("t-padraig", "Padraig Shaw", "LCV technician", "Workshop", "technician", "padraig.shaw@example.com", false, "PS", "#c8b4f0"),
-  P("t-dylan", "Dylan Forde", "CVRT tester", "Workshop", "technician", "dylan.forde@example.com", false, "DyF", "#9fd6f0"),
-  P("t-robbie", "Robbie Naughton", "HGV technician", "Workshop", "technician", "robbie.naughton@example.com", false, "RN", "#6ad0f0"),
-  P("t-cian", "Cian Molloy", "Apprentice technician", "Workshop", "technician", "cian.molloy@example.com", false, "CM", "#f0994b"),
-  P("t-eoin", "Eoin Gaffney", "LCV technician", "Workshop", "technician", "eoin.gaffney@example.com", false, "EG", "#7fd8a4"),
-  P("t-shane", "Shane Carthy", "HGV technician", "Workshop", "technician", "shane.carthy@example.com", false, "SC", "#e6c78a"),
-  P("t-luke", "Luke Hanley", "Trailer technician", "Workshop", "technician", "luke.hanley@example.com", false, "LH", "#c8b4f0"),
-  P("t-ronan", "Ronan Keville", "HGV technician", "Workshop", "technician", "ronan.keville@example.com", false, "RK", "#9fd6f0"),
-  P("t-fionn", "Fionn Barrett", "Auto-electrician", "Workshop", "technician", "fionn.barrett@example.com", false, "FB", "#5fe0a8"),
-  P("t-alan", "Alan Prendergast", "Apprentice technician", "Workshop", "technician", "alan.prendergast@example.com", false, "AP", "#6ad0f0"),
+  P("t-sean", "Seán", "HGV technician", "Workshop", "technician", "sean.doyle@example.com", false, "SD", "#6ad0f0", "Seán Doyle"),
+  P("t-rachel", "Rachel", "Auto-electrician", "Workshop", "technician", "rachel.byrne@example.com", false, "RB", "#5fe0a8", "Rachel Byrne"),
+  P("t-conor", "Conor", "LCV technician", "Workshop", "technician", "conor.keane@example.com", false, "CK", "#f0c04b", "Conor Keane"),
+  P("t-mark", "Edgar", "HGV technician", "Workshop", "technician", "edgar@example.com", false, "ED", "#e2a08c"),
+  P("t-padraig", "Gennadiy", "LCV technician", "Workshop", "technician", "gennadiy@example.com", false, "GE", "#c8b4f0"),
+  P("t-dylan", "Dylan", "CVRT tester", "Workshop", "technician", "dylan.forde@example.com", false, "DyF", "#9fd6f0", "Dylan Forde"),
+  P("t-robbie", "Ron", "HGV technician", "Workshop", "technician", "ron@example.com", false, "RO", "#6ad0f0"),
+  P("t-cian", "Cian", "Apprentice technician", "Workshop", "technician", "cian@example.com", false, "CI", "#f0994b"),
+  P("t-eoin", "JJ", "LCV technician", "Workshop", "technician", "jj@example.com", false, "JJ", "#7fd8a4"),
+  P("t-shane", "Shane", "HGV technician", "Workshop", "technician", "shane.carthy@example.com", false, "SC", "#e6c78a", "Shane Carthy"),
+  P("t-luke", "Luke", "Trailer technician", "Workshop", "technician", "luke.hanley@example.com", false, "LH", "#c8b4f0", "Luke Hanley"),
+  P("t-ronan", "Ronan", "HGV technician", "Workshop", "technician", "ronan.keville@example.com", false, "RK", "#9fd6f0", "Ronan Keville"),
+  P("t-fionn", "Fionn", "Auto-electrician", "Workshop", "technician", "fionn.barrett@example.com", false, "FB", "#5fe0a8", "Fionn Barrett"),
+  P("t-alan", "Alan", "Apprentice technician", "Workshop", "technician", "alan.prendergast@example.com", false, "AP", "#6ad0f0", "Alan Prendergast"),
 ];
 
 /** Monday attendance (from the sample Bizimply report). Reasons are never stored. */
@@ -396,11 +397,11 @@ export const JOB_CARD_FACTS: Record<string, { labourHours: number; partsNet: num
 
 /** Sample job-card import for the estimator (V02). OEM / Haynes columns are local examples. */
 export const SAMPLE_OPERATIONS = [
-  { op: "Engine oil and filter — replace", note: "15W-40, 9.5 L", oem: 0.8, haynes: 1.0 },
-  { op: "Front brake pads — inspect", note: "Measure and record", oem: 0.4, haynes: 0.5 },
-  { op: "Front brake pads — replace (if required)", note: "Axle set", oem: 1.6, haynes: 1.8 },
-  { op: "Air filter — replace", note: "", oem: 0.3, haynes: 0.4 },
-  { op: "General service inspection", note: "Lights, tyres, fluids", oem: 1.0, haynes: 1.2 },
+  { op: "Engine oil and filter, replace", note: "Drained engine oil, replaced oil filter and refilled with 9.5 L 15W-40. Reset service indicator.", oem: 0.8, haynes: 1.0 },
+  { op: "Front brake pads, inspect", note: "Removed front wheels, measured pad thickness and disc run-out. Recorded readings on the job card.", oem: 0.4, haynes: 0.5 },
+  { op: "Front brake pads, replace (if required)", note: "Axle set. Fit only if under the 4 mm limit found at inspection.", oem: 1.6, haynes: 1.8 },
+  { op: "Air filter, replace", note: "Removed housing, replaced element, checked intake ducting for splits.", oem: 0.3, haynes: 0.4 },
+  { op: "General service inspection", note: "Lights, tyres, fluids, wipers and under-vehicle check. Road tested.", oem: 1.0, haynes: 1.2 },
 ];
 
 /* ---- CVRT today: 7 scheduled + 2 awaiting repair + 1 awaiting retest + 2 completed */

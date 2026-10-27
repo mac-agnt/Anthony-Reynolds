@@ -414,6 +414,17 @@ export const A = {
     d.jobs.push({ id, status: "queued", hopper: true, tech: null, customer, vehicle: "C134", complaint, workType: "General workshop", budgetMin: minutes });
     log(d, ME, "person", `Added ${id} to the job card hopper`, id);
   }, "Job added to the hopper"),
+  /* Planner: a job card read from a (simulated) PDF lands in the hopper unscheduled. */
+  addParsedJob: (o: { customer: string; vehicle: string; complaint: string; workType: Job["workType"]; minutes: number; source: string }) => update(d => {
+    const id = "JOB-" + (1080 + d.jobs.filter(j => +j.id.slice(4) >= 1080).length);
+    d.jobs.push({ id, status: "queued", hopper: true, tech: null, customer: o.customer, vehicle: o.vehicle, complaint: o.complaint, workType: o.workType, budgetMin: o.minutes });
+    log(d, ME, "import", `Read ${o.source} into the hopper as ${id}`, id);
+  }, "Job card read into the hopper. Check it before scheduling"),
+  clearDay: () => update(d => {
+    let n = 0;
+    d.jobs.forEach(j => { if (j.status === "queued" && j.tech && j.plannedStart) { j.tech = null; delete j.plannedStart; j.hopper = true; n++; } });
+    log(d, "Jonathan Keenan", "person", `Cleared ${n} planned jobs back to the hopper`, "LIVE", true);
+  }, "Planned jobs moved back to the hopper. Live clockings untouched"),
   breakdownCall: () => update(d => {
     const id = "JOB-" + (1080 + d.jobs.filter(j => +j.id.slice(4) >= 1080).length);
     d.jobs.push({ id, status: "queued", hopper: true, tech: null, customer: "c-galway", vehicle: "C132", complaint: "Breakdown recovery follow-up — air pressure warning, N6 Kinnegad (sample call)", workType: "General workshop", budgetMin: 90 });
@@ -486,6 +497,17 @@ export const A = {
     const v = d.stock.find(x => x.id === vid)!; v.status = "sold"; v.sold = { amount, buyer, date: "2026-10-19", checklist: { "Registration date": false, Warranty: false, "Documents signed": false, "Transfer to DMS (simulated)": false } };
     log(d, ME, "person", `Confirmed sale of ${vid} to ${cname(buyer)} for ${eur(amount)} (with evidence)`, vid);
   }, `${vid} marked sold — confirmed`),
+  addVehicle: (o: { model: string; variant: string; vin: string; location: string; cost: number; eta: string; customer: string | null }) => update(d => {
+    const n = Math.max(...d.stock.map(v => +v.id.slice(1))) + 1;
+    const id = "V" + String(n).padStart(3, "0");
+    d.stock.push({
+      id, model: o.model, variant: o.variant, range: o.model === "Master" ? "Master" : o.model === "Trafic" ? "Trafic" : "Trucks",
+      status: o.eta ? "incoming" : "available", vin: o.vin.trim() || null, svo: "SVO-" + (40100 + n), reg: "", colour: "White", gearbox: "Manual", power: "",
+      location: o.location, customer: o.customer, jobRef: null, eta: o.eta || undefined, receivedDaysAgo: o.eta ? undefined : 0,
+      costs: [{ label: "Base vehicle", amount: o.cost }], rebate: null, specStatus: "missing", notes: "Added manually", folderUrl: "",
+    });
+    log(d, ME, "person", `Added ${id} (Renault ${o.model} ${o.variant}) to stock manually`, id);
+  }, "Vehicle added to the tracker"),
   restoreSold: (vid: string, reason: string) => update(d => {
     const v = d.stock.find(x => x.id === vid)!; v.status = "available"; delete v.sold;
     d.corrections.unshift({ id: "SC-" + seq++, vehicle: vid, reason: "Restored to active: " + reason, at: now(d) });

@@ -174,13 +174,32 @@ function JobPanel({ s, label, job }: { s: State; label: string; job?: import("./
   </Panel>;
 }
 
+/* Opening slide, as on Anthony's existing morning brief. */
+const LEAN_QUOTES: [string, string][] = [
+  ["All we are doing is looking at the time line from order placement to job completion, and reducing non-value added time.", "Taiichi Ohno"],
+  ["Having no problems is the biggest problem of all.", "Taiichi Ohno"],
+  ["Where there is no standard, there can be no kaizen.", "Taiichi Ohno"],
+  ["The most dangerous kind of waste is the waste we do not recognize.", "Shigeo Shingo"],
+];
+function GoodMorning({ note }: { note: ReactNode }) {
+  const [q, setQ] = useState(0);
+  const [text, by] = LEAN_QUOTES[q];
+  return <>
+    <div className="gm">
+      <h1>GOOD MORNING<em>.</em></h1>
+      <div className="date">Monday, 19 October 2026</div>
+      <div className="gm-quote"><q>{text}</q>
+        <div className="by">{by}<Btn sm onClick={() => setQ((q + 1) % LEAN_QUOTES.length)}>Cycle quote</Btn></div></div>
+    </div>{note}
+  </>;
+}
+
 function Slide({ id, s, techIdx }: { id: string; s: State; techIdx: number }) {
   const [, d] = useDerived();
   const note = s.meeting.notes[id];
   const N = note ? <div className="pres-mid d-muted">{note}</div> : null;
   switch (id) {
-    case "greeting": return <><h2>Good morning, everyone</h2><div className="pres-big">Monday 19 October 2026</div>
-      <div className="d-grid d-g2"><Panel label="Today's focus"><div className="pres-mid">Get V008 repaired and retested, and keep Billy's afternoon on time.</div></Panel><Panel label="Lean message"><div className="pres-mid">Small fixes, every day. If you're waiting on something, say so early.</div></Panel></div>{N}</>;
+    case "greeting": return <GoodMorning note={N} />;
     case "events": return <><h2>Team celebrations &amp; events</h2><div className="d-grid d-g3">
       <Panel label="Anniversary"><div className="pres-mid">Ronan Keville — 5 years at Reynolds</div><div className="d-muted">Fictional example · shared with consent</div></Panel>
       <Panel label="Event"><div className="pres-mid">Workshop BBQ — Friday 16:30</div><div className="d-muted">Yard, weather permitting</div></Panel>
@@ -220,6 +239,12 @@ function Slide({ id, s, techIdx }: { id: string; s: State; techIdx: number }) {
   return null;
 }
 
+function WorkshopClock() {
+  const [t, setT] = useState(() => new Date());
+  useEffect(() => { const id = setInterval(() => setT(new Date()), 1000); return () => clearInterval(id); }, []);
+  return <div className="ar-clock"><small>WORKSHOP TIME</small><b>{t.toLocaleTimeString("en-IE", { hour12: false })}</b></div>;
+}
+
 function Presentation({ start, close }: { start: number; close: () => void }) {
   const [s] = useDerived();
   const enabled = s.meeting.sections.filter(x => x.enabled);
@@ -236,7 +261,15 @@ function Presentation({ start, close }: { start: number; close: () => void }) {
   if (!sec) return null;
   return (
     <div className="pres" role="dialog" aria-label="Morning meeting presentation">
-      <div className="pres-top"><b style={{ letterSpacing: 1 }}>REYNOLDS COMMERCIALS</b><span style={{ opacity: .8 }}>Morning meeting · Mon 19 Oct · {hhmm(s.clock)}</span><span className="d-grow" /><b style={{ fontSize: 18 }}>{sec.label}</b><span className="d-mono">{i + 1} of {enabled.length}</span><Btn sm onClick={A.refreshMeeting}>Refresh</Btn><Btn sm onClick={close}>Exit</Btn></div>
+      <div className="pres-top ar">
+        <span className="ar-logo" aria-label="Reynolds Commercials"><span>R</span><b>REYNOLDS<br />COMMERCIALS</b></span>
+        <span className="ar-word cvrt">CVRT</span><span className="ar-word">RENAULT<br />TRUCKS</span>
+        <span className="d-grow" />
+        <WorkshopClock />
+        <span className="ar-loc">TONES RD. N37EH24</span>
+        <Btn sm onClick={A.refreshMeeting}>Refresh</Btn><Btn sm onClick={close}>Exit</Btn>
+      </div>
+      <div className="pres-sub"><span className="pg">{i + 1} of {enabled.length}</span>{sec.label}<span className="sync">Live from Pulse records · {hhmm(s.meeting.refreshedAt)}</span></div>
       <div className="pres-canvas">
         <button className="pres-arrow" style={{ left: 14 }} onClick={() => setI(Math.max(0, i - 1))} disabled={i === 0} aria-label="Previous slide">‹</button>
         <div className="pres-slide" key={sec.id}><Slide id={sec.id} s={s} techIdx={s.meeting.techIdx} /></div>
