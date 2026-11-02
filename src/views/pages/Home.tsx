@@ -8,9 +8,9 @@ type Props = { v: any };
 export default function Home({ v }: Props) {
   return (
     <>
-      <div style={{"position":"relative","display":"flex","gap":"20px","height":"100%","padding":"0 22px 22px"}}>
+      <div data-home="1" data-home-empty={v.heliosEmpty ? "1" : "0"} style={{"position":"relative","display":"flex","gap":"20px","height":"100%","padding":"0 22px 22px"}}>
         <div style={css(v.homeCanvasStyle)} />
-        <div style={css(v.chatColumnStyle)}>
+        <div data-home-chat="1" style={css(v.chatColumnStyle)}>
           {v.heliosEmpty && (
             <>
               <div style={{"flex":"1 1 0","minHeight":"0"}} />
@@ -61,6 +61,30 @@ export default function Home({ v }: Props) {
                     </svg>
                   </button>
                 </div>
+                {v.heliosEmpty && v.showPrompts && (
+                  <>
+                    <div data-prompts="1" style={{"borderTop":"1px solid var(--border)"}}>
+                      {arr(v.composerPrompts).map((p: any, i14p: number) => (
+                        <Fragment key={i14p}>
+                          <button className="ixl" onClick={p?.run} style={css(p?.rowStyle)}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--faint)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{"flex":"none"}}>
+                              <path d={p?.icon} />
+                            </svg>
+                            <span style={{"flex":"1","minWidth":"0","overflow":"hidden","textOverflow":"ellipsis","whiteSpace":"nowrap"}}>
+                              {txt(p?.label)}
+                            </span>
+                            <span style={{"flex":"none","fontFamily":"var(--mono)","fontSize":"9px","letterSpacing":"0.12em","color":"var(--faint)"}}>
+                              {txt(p?.tag)}
+                            </span>
+                          </button>
+                        </Fragment>
+                      ))}
+                      <button className="ixl" onClick={v.togglePromptsMore} style={{"display":"block","width":"100%","padding":"8px 14px","border":"0","borderTop":"1px solid var(--border)","background":"none","color":"var(--dim)","fontSize":"12px","textAlign":"left","cursor":"pointer"}}>
+                        {txt(v.promptsMoreLabel)}
+                      </button>
+                    </div>
+                  </>
+                )}
                 {v.heliosEmpty && (
                   <>
                     <div style={{"display":"flex","flexWrap":"wrap","alignItems":"center","gap":"2px","padding":"6px 8px","borderTop":"1px solid var(--border)","background":"var(--surface-faint)"}}>

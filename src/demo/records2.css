@@ -1,0 +1,7 @@
+/* Records, Settings and integrations. Tokens only. */
+.r-src{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+@media (max-width:1180px){.r-src{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:720px){.r-src{grid-template-columns:1fr}}
+.r-sim{font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:0 4px;height:15px;display:inline-flex;align-items:center}
+.r-big{font-size:22px;font-weight:600;letter-spacing:-.5px;font-variant-numeric:tabular-nums}
+.ar-plate,.ar-plate b{white-space:nowrap}

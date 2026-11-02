@@ -7,7 +7,7 @@ export default function HomeThread({ v }: Props) {
   return (
     <>
       <div style={css(v.threadWidthStyle)}>
-        <div style={{"display":"flex","alignItems":"flex-start","gap":"20px","paddingBottom":"22px"}}>
+        <div data-thread-head="1" style={{"display":"flex","alignItems":"flex-start","gap":"20px","paddingBottom":"22px"}}>
           <div style={{"flex":"1","minWidth":"0","paddingTop":"2px"}}>
             <div style={{"fontFamily":"var(--mono)","fontSize":"10.5px","letterSpacing":"0.12em","color":"var(--faint)"}}>
               {"CONVERSATION"}
@@ -17,7 +17,7 @@ export default function HomeThread({ v }: Props) {
             </div>
           </div>
           <div style={{"flex":"none","display":"flex","flexDirection":"column","alignItems":"flex-end","gap":"10px","animation":"popIn .34s var(--ease) both"}}>
-            <div style={{"display":"flex","flexWrap":"nowrap","alignItems":"center","gap":"8px","fontFamily":"var(--mono)"}}>
+            <div data-thread-clock="1" style={{"display":"flex","flexWrap":"nowrap","alignItems":"center","gap":"8px","fontFamily":"var(--mono)"}}>
               {arr(v.flipUnits).map((u: any, i6: number) => (
                 <Fragment key={i6}>
                   <div style={{"display":"flex","flexWrap":"nowrap","alignItems":"center","gap":"3px"}}>
@@ -115,7 +115,7 @@ export default function HomeThread({ v }: Props) {
                       {m?.hasTable && (
                         <>
                           <div style={{"marginTop":"16px","background":"var(--surface)","border":"1px solid var(--border)","borderRadius":"var(--card-r,18px)","backdropFilter":"blur(16px)","overflow":"hidden"}}>
-                            <div style={css(cat("display:grid;grid-template-columns:", m?.tableCols, ";background:var(--surface)"))}>
+                            <div data-ans-head="1" style={css(cat("display:grid;grid-template-columns:", m?.tableCols, ";background:var(--surface)"))}>
                               {arr(m?.cols).map((c: any, i9: number) => (
                                 <Fragment key={i9}>
                                   <div style={{"padding":"11px 16px","fontFamily":"var(--mono)","fontSize":"9.5px","letterSpacing":"0.09em","color":"var(--faint)","textTransform":"uppercase"}}>
@@ -126,10 +126,10 @@ export default function HomeThread({ v }: Props) {
                             </div>
                             {arr(m?.rows).map((r: any, i10: number) => (
                               <Fragment key={i10}>
-                                <div className="ixh" style={css(cat("display:grid;grid-template-columns:", m?.tableCols, ";border-top:1px solid var(--border)"))}>
+                                <div className="ixh" data-ans-row="1" style={css(cat("display:grid;grid-template-columns:", m?.tableCols, ";border-top:1px solid var(--border)"))}>
                                   {arr(r?.cells).map((cell: any, i11: number) => (
                                     <Fragment key={i11}>
-                                      <div style={css(cat("padding:12px 16px;font-family:", cell?.font, ";font-size:13px;color:", cell?.color, ";overflow:hidden;text-overflow:ellipsis;white-space:nowrap"))}>
+                                      <div data-label={m?.cols?.[i11]} style={css(cat("padding:12px 16px;font-family:", cell?.font, ";font-size:12.5px;line-height:1.45;color:", cell?.color, ";overflow-wrap:break-word;min-width:0"))}>
                                         {txt(cell?.v)}
                                       </div>
                                     </Fragment>

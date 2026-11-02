@@ -361,3 +361,15 @@ button.d-chip{cursor:pointer}
 .tl-bar .ar-plate b{font-size:10px}
 .tl-bar .ar-hrs{display:inline-block;flex:none}
 .tl-bar.gap.ck2{white-space:nowrap;overflow:hidden;padding:0 3px}
+
+/* Keyloop visibility */
+.kl-badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 9px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);font-size:10.5px;color:var(--body);white-space:nowrap}
+.kl-badge i{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.kl-badge b{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--faint);font-weight:500}
+.kl-sep{color:var(--faint)}
+.kl-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px}
+@media (max-width:1100px){.kl-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.kl-ent{border:1px solid var(--border);border-radius:12px;padding:10px 12px;background:var(--surface-faint);display:flex;flex-direction:column;gap:5px}
+.kl-ent .n{font-size:18px;font-weight:600;letter-spacing:-.4px;font-variant-numeric:tabular-nums}
+.kl-flow{display:grid;grid-template-columns:auto auto auto 1fr;gap:8px;align-items:center;font-size:12.5px;padding:10px 12px;border:1px solid var(--border);border-radius:12px}
+.kl-flow>div{grid-column:1/-1;font-size:12px}

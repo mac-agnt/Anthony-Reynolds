@@ -1,42 +1,78 @@
 import { useState } from "react";
-import { A, AGENTS, approvals, cname, dur, elapsed, handoverGates, hhmm, pname, useDerived, vehicleLabel, type Role } from "./store";
-import { COMPANIES, COMPANY, SERVICE_VEHICLES, SOURCES, STAFF } from "./fixtures";
-import { Avatar, Btn, Card, Chip, Field, Flag, Head, JLink, Metric, Note, Page, Seg, Table, VLink, canSeeMoney } from "./ui";
+import { A, AGENTS, approvals, cname, daysBetween, dur, elapsed, eur, fmtDate, hhmm, pname, useDerived, vehicleLabel, type Role } from "./store";
+import { COMPANIES, COMPANY, RECEIVABLES, SERVICE_VEHICLES, SOURCES, STAFF } from "./fixtures";
+import { Avatar, Btn, CLink, Card, Chip, Field, Flag, Head, JLink, Metric, Note, Page, Plate, Seg, Table, canSeeMoney } from "./ui";
+import { RegLink as VLink } from "./recordNav";
 import { getTheme, go, setTheme } from "./nav";
 import { THEMES } from "../logic/data";
+import { ANPR_EVENTS, COMMS, NOTICES, STATUS, agoText, attentionLine, attentionList, openVehicle, yardVehicles } from "./yard";
+import { KeyloopBadge, KeyloopPanel } from "./keyloop";
+import { PlateLink, openRecord } from "./recordNav";
+import "./records2.css";
 
 /* ═════════════════════════ RECORDS ═════════════════════════ */
+/** The Records hero wash is a positioned layer at z-index 0, so Records pages sit above it explicitly. */
+const RecordsPage = ({ children }: { children: React.ReactNode }) => <div style={{ position: "relative", zIndex: 1 }}><Page>{children}</Page></div>;
 export function Companies() {
   const [s] = useDerived();
+  const [k, setK] = useState<"customer" | "supplier" | "all">("customer");
+  const [q, setQ] = useState("");
+  const yv = yardVehicles(s);
+  const rows = COMPANIES.filter(c => (k === "all" || c.kind === k) && (!q || (c.name + c.contact + (c.account ?? "")).toLowerCase().includes(q.toLowerCase()))).map(c => {
+    const onSite = yv.filter(v => v.customerId === c.id);
+    const recs = RECEIVABLES.filter(r => r.customer === c.id);
+    return {
+      c, onSite, total: SERVICE_VEHICLES.filter(v => v.customer === c.id).length + s.stock.filter(v => v.customer === c.id).length,
+      jobs: s.jobs.filter(j => j.customer === c.id && j.status !== "completed"), bal: recs.reduce((t, r) => t + r.amount, 0), od: recs.filter(r => daysBetween(r.due) > 0).length,
+      holds: onSite.filter(v => v.status === "accounts_hold"),
+    };
+  }).sort((a, b) => b.onSite.length - a.onSite.length || a.c.name.localeCompare(b.c.name));
   return (
-    <Page><Head title="Companies" sub="Customers and suppliers. Customer names are fictional demo companies; Renault is shown as the manufacturer source." />
-      <Card className="flush"><Table rowKey={c => c.id} rows={COMPANIES} onRow={c => A.open("company", c.id)} cols={[
-        { key: "n", label: "Company", render: c => <b style={{ fontWeight: 500 }}>{c.name}</b>, sort: c => c.name },
-        { key: "k", label: "Kind", render: c => <Chip tone={c.kind === "supplier" ? "acc" : undefined}>{c.kind}</Chip>, sort: c => c.kind },
-        { key: "t", label: "Type", render: c => c.type }, { key: "c", label: "Contact", render: c => c.contact },
-        { key: "v", label: "Vehicles", num: true, render: c => SERVICE_VEHICLES.filter(v => v.customer === c.id).length + s.stock.filter(v => v.customer === c.id).length },
-        { key: "j", label: "Live jobs", num: true, render: c => s.jobs.filter(j => j.customer === c.id && j.status !== "completed").length },
-      ]} /></Card></Page>
+    <RecordsPage><Head title="Companies" sub="Customers and suppliers, joined to the vehicles on site, open jobs, Keyloop account and balance. Customer names are fictional demo companies.">
+      <KeyloopBadge />
+      <Seg value={k} onChange={setK} options={[["customer", "Customers"], ["supplier", "Suppliers"], ["all", "All"]]} label="Kind" />
+      <input className="d-input" style={{ width: 200 }} placeholder="Search company or account" value={q} onChange={e => setQ(e.target.value)} aria-label="Search companies" /></Head>
+      <Card className="flush"><Table rowKey={r => r.c.id} rows={rows} onRow={r => A.open("company", r.c.id)} empty="No companies match." cols={[
+        { key: "n", label: "Company", render: r => <div><b style={{ fontWeight: 500 }}>{r.c.name}</b><div className="d-muted" style={{ fontSize: 11 }}>{r.c.type}</div></div>, sort: r => r.c.name },
+        { key: "ac", label: "Keyloop account", render: r => <span className="d-mono d-muted">{r.c.account ?? "-"}</span> },
+        { key: "ch", label: "Preferred channel", render: r => r.c.channel ? <div><Chip>{r.c.channel}</Chip><div className="d-muted" style={{ fontSize: 11, marginTop: 3 }}>{r.c.contact}</div></div> : <span className="d-muted">{r.c.contact}</span> },
+        { key: "v", label: "On site", render: r => r.onSite.length ? <div><b>{r.onSite.length}</b> <span className="d-muted">of {r.total}</span><div className="d-row" style={{ gap: 6, marginTop: 3 }}>{r.onSite.slice(0, 3).map(v => <VLink key={v.key} id={v.key} />)}{r.onSite.length > 3 && <span className="d-faint">+{r.onSite.length - 3}</span>}</div></div> : <span className="d-muted">{r.total ? `0 of ${r.total}` : "-"}</span>, sort: r => r.onSite.length },
+        { key: "j", label: "Open jobs", num: true, render: r => r.jobs.length ? <span className="d-row" style={{ gap: 6, justifyContent: "flex-end" }}>{r.jobs.slice(0, 2).map(j => <JLink key={j.id} id={j.id} />)}{r.jobs.length > 2 && <span className="d-faint">+{r.jobs.length - 2}</span>}</span> : "0", sort: r => r.jobs.length },
+        { key: "b", label: "Balance", num: true, render: r => canSeeMoney(s) ? (r.bal ? <span style={{ color: r.od ? "var(--bad)" : undefined }}>{eur(r.bal)}</span> : "-") : <span className="d-faint">hidden</span>, sort: r => r.bal },
+        { key: "h", label: "Accounts", render: r => r.holds.length ? <Chip tone="bad">{r.holds.length} on hold</Chip> : r.od && canSeeMoney(s) ? <Chip tone="warn">{r.od} overdue</Chip> : r.c.kind === "customer" ? <Chip tone="ok">Clear</Chip> : <span className="d-faint">-</span>, sort: r => r.holds.length * 10 + r.od },
+      ]} /></Card></RecordsPage>
   );
 }
+
+interface VRow { key: string; reg: string; kind: "On site" | "Dealership stock" | "Not on site"; model: string; custId: string | null; status: { label: string; tone: "ok" | "warn" | "bad" | "acc" | undefined; order: number }; job: string | null; location: string; last: string }
 export function Vehicles() {
   const [s] = useDerived();
-  const [f, setF] = useState<"all" | "stock" | "customer">("all");
+  const [f, setF] = useState<"all" | "site" | "stock" | "off">("all");
   const [q, setQ] = useState("");
-  const rows = [
-    ...s.stock.map(v => ({ id: v.id, reg: v.reg || "—", kind: "Dealership stock", model: `Renault ${v.model} ${v.variant}`, cust: v.customer ?? v.sold?.buyer ?? v.promisedTo ?? null, status: v.status })),
-    ...SERVICE_VEHICLES.map(v => ({ id: v.id, reg: v.reg, kind: "Customer-owned", model: `${v.model} ${v.kind.toLowerCase()}`, cust: v.customer, status: s.jobs.some(j => j.vehicle === v.id && j.status !== "completed") ? "in workshop" : s.cvrt.some(t => t.vehicle === v.id) ? "CVRT today" : "—" })),
-  ].filter(r => (f === "all" || (f === "stock" ? r.kind === "Dealership stock" : r.kind === "Customer-owned")) && (!q || (r.id + r.reg + r.model + cname(r.cust)).toLowerCase().includes(q.toLowerCase())));
+  const yv = yardVehicles(s);
+  const onYard = new Set(yv.map(v => v.key));
+  const rows: VRow[] = [
+    ...yv.map(v => ({ key: v.key, reg: v.reg, kind: "On site" as const, model: v.model, custId: v.customerId, status: { label: STATUS[v.status].label, tone: STATUS[v.status].tone, order: STATUS[v.status].order }, job: v.jobId, location: v.location, last: `${v.last.who}, ${v.last.channel}, ${agoText(v.last.minsAgo)}` })),
+    ...s.stock.filter(v => !onYard.has(v.id)).map(v => ({ key: v.id, reg: v.reg || v.id, kind: "Dealership stock" as const, model: `Renault ${v.model} ${v.variant}`, custId: v.customer ?? v.sold?.buyer ?? v.promisedTo ?? null,
+      status: { label: v.status.toUpperCase(), tone: v.status === "available" ? "ok" as const : v.status === "sold" ? undefined : v.status === "incoming" ? "acc" as const : "warn" as const, order: 20 + ["available", "reserved", "preparation", "incoming", "sold"].indexOf(v.status) },
+      job: v.jobRef, location: v.status === "incoming" ? `Incoming${v.eta ? `, ETA ${fmtDate(v.eta)}` : ""}` : v.location, last: "Keyloop stock record" })),
+    ...SERVICE_VEHICLES.filter(v => !onYard.has(v.id) && v.customer).map(v => { const n = NOTICES.find(x => x.vehicle === v.id); return { key: v.id, reg: v.reg, kind: "Not on site" as const, model: `${v.model} ${v.kind.toLowerCase()}`, custId: v.customer, status: { label: s.cvrt.some(t => t.vehicle === v.id) ? "CVRT TODAY" : n ? "NOTICE DUE" : "OFF SITE", tone: n ? "warn" as const : undefined, order: 40 }, job: s.jobs.find(j => j.vehicle === v.id && j.status !== "completed")?.id ?? null, location: n ? `Renault notice ${n.id}, due ${fmtDate(n.due)}` : "Customer yard", last: "Keyloop vehicle record" }; }),
+  ].sort((a, b) => a.status.order - b.status.order).filter(r => (f === "all" || (f === "site" ? r.kind === "On site" : f === "stock" ? r.kind === "Dealership stock" : r.kind === "Not on site")) && (!q || (r.key + r.reg + r.model + cname(r.custId) + (r.job ?? "")).toLowerCase().replace(/-/g, "").includes(q.toLowerCase().replace(/-/g, ""))));
+  const nSite = yv.length, nStock = s.stock.filter(v => !onYard.has(v.id)).length;
   return (
-    <Page><Head title="Vehicles" sub="One canonical record per physical vehicle — dealership stock and customer-owned service vehicles kept distinct.">
-      <Seg value={f} onChange={setF} options={[["all", "All"], ["stock", "Dealership stock"], ["customer", "Customer-owned"]]} />
-      <input className="d-input" style={{ width: 220 }} placeholder="Search id, reg, model, customer" value={q} onChange={e => setQ(e.target.value)} aria-label="Search vehicles" /></Head>
-      <Card className="flush"><Table rowKey={r => r.id} rows={rows} limit={20} onRow={r => A.open("vehicle", r.id)} cols={[
-        { key: "id", label: "Record", render: r => <b>{r.id}</b>, sort: r => r.id }, { key: "reg", label: "Registration", render: r => r.reg, sort: r => r.reg },
-        { key: "k", label: "Kind", render: r => <Chip tone={r.kind === "Dealership stock" ? "acc" : undefined}>{r.kind}</Chip>, sort: r => r.kind },
-        { key: "m", label: "Model", render: r => r.model, sort: r => r.model }, { key: "c", label: "Customer", render: r => cname(r.cust), sort: r => cname(r.cust) },
-        { key: "s", label: "Status", render: r => r.status, sort: r => r.status },
-      ]} empty="No vehicles match." /></Card></Page>
+    <RecordsPage><Head title="Vehicles" sub={`${nSite} vehicles on site, ${nStock} dealership stock records and the customer fleet, one canonical record per vehicle. Open any registration for the full story.`}>
+      <KeyloopBadge />
+      <Seg value={f} onChange={setF} options={[["all", "All"], ["site", "On site"], ["stock", "Dealership stock"], ["off", "Not on site"]]} label="Filter" />
+      <input className="d-input" style={{ width: 220 }} placeholder="Search reg, model, customer, job" value={q} onChange={e => setQ(e.target.value)} aria-label="Search vehicles" /></Head>
+      <Card className="flush"><Table rowKey={r => r.key} rows={rows} limit={25} onRow={r => openRecord(s, r.key)} empty="No vehicles match." cols={[
+        { key: "reg", label: "Registration", render: r => r.reg === r.key ? <VLink id={r.key} /> : <PlateLink s={s} id={r.key} reg={r.reg} />, sort: r => r.reg },
+        { key: "m", label: "Vehicle", render: r => r.model, sort: r => r.model },
+        { key: "c", label: "Customer", render: r => <CLink id={r.custId} />, sort: r => cname(r.custId) },
+        { key: "s", label: "Status", render: r => <Chip tone={r.status.tone}>{r.status.label}</Chip>, sort: r => r.status.order },
+        { key: "j", label: "Job", render: r => r.job ? <JLink id={r.job} /> : <span className="d-faint">-</span>, sort: r => r.job ?? "z" },
+        { key: "l", label: "Location", render: r => <span className="d-muted">{r.location}</span>, sort: r => r.location },
+        { key: "u", label: "Last update", render: r => <span className="d-muted">{r.last}</span> },
+      ]} /></Card></RecordsPage>
   );
 }
 
@@ -68,6 +104,14 @@ export function AiControls() {
         </div><Note>Breaks, leave and approved training are always excluded. Stale data is never treated as proof someone is idle.</Note></Card>
         <Card title="Human review required for">{([["reviewWork", "Work descriptions on job cards"], ["reviewDiscount", "Discounts above the threshold"], ["reviewComms", "Customer communication"], ["reviewAccounts", "Accounting changes"], ["reviewSafety", "Safety-related and test outcomes"]] as const).map(([k, l]) =>
           <div className="d-li" key={k}><span className="d-grow">{l}</span><Chip tone="ok">Required</Chip></div>)}<Note>Locked on in this demo — no agent can approve, send, post or certify.</Note></Card>
+        <Card title="Write-back to Keyloop" aside={<KeyloopBadge />} style={{ gridColumn: "1 / -1" }}>
+          <div className="d-grid d-g2">
+            <div>{[["Job status changed in Pulse", "Written back on change and logged", "ok"], ["Awaiting-parts flag with the PO number", "Written back automatically", "ok"], ["Release clearance note on the customer account", "Only after accounts approve", "warn"], ["New vehicle from an unmatched ANPR read", "Requested, then reviewed in Keyloop", "warn"]].map(([a, b, tone]) =>
+              <div className="d-li" key={a}><span className="d-grow">{a}</span><Chip tone={tone as "ok" | "warn"}>{b}</Chip></div>)}</div>
+            <div><div className="d-eyebrow" style={{ marginBottom: 6 }}>Latest sync log</div>{s.yard.keyloopLog.slice(0, 4).map((l, i) => <div className="d-li" key={i}><span className="d-mono d-faint" style={{ width: 42 }}>{l.at}</span><Chip tone={l.dir === "Pulse to Keyloop" ? "acc" : undefined}>{l.dir}</Chip><span className="d-grow d-muted">{l.text}</span></div>)}</div>
+          </div>
+          <Note>Demo representation of the intended integration. Agents never post invoices or change a ledger.</Note>
+        </Card>
         <Card title="Agent permissions" style={{ gridColumn: "1 / -1" }}><Table rowKey={a => a.id} rows={AGENTS} cols={[
           { key: "n", label: "Agent", render: a => <b style={{ fontWeight: 500 }}>{a.name}</b> }, { key: "p", label: "Purpose", render: a => <span className="d-muted">{a.purpose}</span> },
           { key: "s", label: "Reads", render: a => a.sources.join(", ") }, { key: "w", label: "Writes", render: () => <Chip>Drafts only</Chip> }, { key: "e", label: "External", render: () => <Chip>None</Chip> },
@@ -82,11 +126,10 @@ export function ActivityPage({ tab }: { tab: string }) {
   const [s, d] = useDerived();
   if (tab === "attention") {
     const ap = approvals(s, d);
-    const v8 = handoverGates(s, "V008");
     const rows = [
       ...d.gaps.map(g => ({ k: g.id, what: `${pname(g.id)} present, no job clocking since ${g.since} (${dur(g.gapMin ?? 0)})`, owner: "p-jonathan", go: () => go("Workshop", "live") })),
       ...d.budgetFlags.map(f => ({ k: f.j.id, what: `${f.j.id} at ${elapsed(f.j, s.clock)}/${f.j.budgetMin} min — ${pname(f.j.tech)}`, owner: "p-jonathan", go: () => go("Workshop", "live") })),
-      ...(v8.ready ? [] : [{ k: "v8", what: `V008 handover blocked — ${v8.list.filter(x => !x.ok).length} gates open`, owner: "p-jack", go: () => go("Sales", "handovers") }]),
+      ...attentionList(s).map(v => { const l = attentionLine(v); return { k: "y-" + v.key, what: `${v.reg} ${v.customer}: ${l.head.charAt(0) + l.head.slice(1).toLowerCase().replace("cvrt", "CVRT")}, ${l.sub}`, owner: v.status === "accounts_hold" ? "p-caroline" : v.status === "cvrt_issue" ? "p-elizabeth" : v.part?.owner ?? "p-anthony", go: () => openVehicle(v.key) }; }),
       ...ap.map(a => ({ k: a.id, what: `${a.queue}: ${a.title}`, owner: a.reviewer, go: () => go("Work", "approvals") })),
     ];
     return <Page><Head title="Needs attention" sub="Derived live from the current records — not a second, static alert list." />
@@ -96,7 +139,7 @@ export function ActivityPage({ tab }: { tab: string }) {
   }
   const evs = s.activity.filter(a => tab === "all" || (tab === "people" ? a.kind === "person" : tab === "agents" ? a.kind === "agent" : true));
   const link = (e: string | undefined) => !e ? null : e.startsWith("JOB-") ? <JLink id={e} /> : /^V\d|^C\d/.test(e) ? <VLink id={e} /> : <span className="d-mono d-faint">{e}</span>;
-  return <Page><Head title={{ all: "Everything", people: "People", agents: "Agents" }[tab] ?? "Activity"} sub="Human, agent, import and workflow events, newest first. Agent events are sample runs; nothing synced with Keyloop (planned)." />
+  return <Page><Head title={{ all: "Everything", people: "People", agents: "Agents" }[tab] ?? "Activity"} sub="Human, agent, import and workflow events, newest first. Agent events are sample runs. Keyloop sync events are shown with their source."><KeyloopBadge /></Head>
     <Card className="flush"><Table rowKey={e => e.id} rows={evs} limit={25} cols={[
       { key: "t", label: "Time", render: e => <span className="d-mono">{e.at}</span> },
       { key: "k", label: "Source", render: e => <Chip tone={e.kind === "agent" ? "acc" : e.kind === "import" ? "warn" : undefined}>{e.kind === "agent" ? "Agent · sample" : e.kind}</Chip> },
@@ -130,7 +173,11 @@ export function Teams() {
     ]} /></Card></Page>;
 }
 const SYSTEMS = [
-  ["Keyloop", "Chosen future workshop/accounting core (Dec 2026)", "Planned · sample mappings only", "Exact product, modules, dealer consent, partner access, cost, entities, read/write permissions, update frequency"],
+  ["Keyloop", "System of record for customers, vehicles, jobs, parts, invoices and sales", "Demo representation, shown as connected", "Exact modules, partner API access, dealer consent, read and write permissions, update frequency"],
+  ["WhatsApp groups", "Parts, workshop, yard and service desk groups hold daily operational detail", "Simulated, matched to vehicles", "Which groups and numbers may be read, and consent for customer threads"],
+  ["Email mailboxes", "accounts@, service advisors and the Renault notices mailbox", "Simulated, matched to vehicles", "Mailbox access method and retention"],
+  ["ANPR gate cameras", "Gate 1 in and out, Gate 2 CVRT", "Simulated, planned", "Camera vendor, event feed and plate-read confidence thresholds"],
+  ["Renault notices", "Periodic inspection emails forwarded to customers by hand today", "Simulated, matched to customers", "Notice format and sender consistency"],
   ["AssetMinder", "Current workshop source", "Legacy sample export", "Which reports and identifiers remain available during migration?"],
   ["Sage", "Current accounts, version unknown", "Legacy sample snapshot", "Which historical balances need retaining after Keyloop migration?"],
   ["Bizimply", "Attendance, leave, HR information", "Sample report · API unconfirmed", "Which approved attendance/rota fields can be accessed, and how?"],
@@ -157,20 +204,45 @@ export function Systems() {
       <Note>No fixed price, delivery promise or integration guarantee.</Note></Card>
   </Page>;
 }
+function tally<T>(list: T[], key: (x: T) => string): [string, T[]][] {
+  const m = new Map<string, T[]>();
+  list.forEach(x => { const k = key(x); m.set(k, [...(m.get(k) ?? []), x]); });
+  return [...m.entries()];
+}
+function SourceCard({ title, rows, note, state = "Simulated" }: { title: string; rows: [string, string][]; note: string; state?: string }) {
+  return (
+    <Card title={title} aside={<Chip tone="acc">{state}</Chip>}>
+      <div className="d-list">{rows.map(([a, b]) => <div className="d-li" key={a} style={{ flexDirection: "column", alignItems: "flex-start", gap: 2 }}><span>{a}</span><span className="d-muted">{b}</span></div>)}</div>
+      <div style={{ marginTop: 8 }}><Note>{note}</Note></div>
+    </Card>
+  );
+}
 export function Integrations() {
   const [s] = useDerived();
+  const today = COMMS.filter(c => c.day === "Today");
+  const wa = tally(today.filter(c => c.channel === "WhatsApp"), c => c.source).map(([n, l]) => [n, `${l.length} ${l.length === 1 ? "message" : "messages"}, last ${l[0].at}`] as [string, string]);
+  const mail = tally(today.filter(c => c.channel === "Email"), c => c.source).map(([n, l]) => [n, `${l.length} ${l.length === 1 ? "email" : "emails"}, last ${l[0].at}`] as [string, string]);
+  const cams = tally(ANPR_EVENTS.filter(e => e.day === "Today"), e => e.camera).map(([n, l]) => [n, `${l.length} ${l.length === 1 ? "read" : "reads"}, lowest confidence ${Math.min(...l.map(e => e.confidence))}%`] as [string, string]);
   const srcs = [
-    { n: "AssetMinder", label: SOURCES.assetminder, fresh: `${hhmm(s.clock - 10)} today`, state: "Read · sample", tone: "warn" as const, fields: ["Job number → Job", "Technician → Person", "Clock on/off → Time entry", "Registration → Vehicle"], rejected: 0, dups: 0 },
-    { n: "Sage", label: SOURCES.sage, fresh: "07:00 today", state: "Read · sample", tone: "warn" as const, fields: ["Account → Company", "Invoice → Invoice snapshot", "Balance → Receivable (total)"], rejected: 1, dups: 0 },
-    { n: "Bizimply", label: SOURCES.bizimply, fresh: "08:00 today", state: "Read · sample · API unconfirmed", tone: "warn" as const, fields: ["Employee → Person", "Status → Attendance (present/absent/training)", "Reason → not imported"], rejected: 0, dups: 0 },
-    { n: "Renault order book", label: SOURCES.renault, fresh: s.imports.applied.length ? `${s.imports.history[0].at}` : "Mon 12 Oct", state: s.imports.applied.length ? "Applied · local" : "Diff pending", tone: s.imports.applied.length ? "ok" as const : "warn" as const, fields: ["SVO → Order reference", "VIN → Vehicle (when issued)", "ETA → Arrival date"], rejected: 0, dups: s.imports.history.filter(h => h.id.endsWith("repeat")).length },
-    { n: "Keyloop", label: "Planned — December 2026", fresh: "—", state: "Planned · not connected", tone: undefined, fields: ["Mappings drafted from samples only"], rejected: 0, dups: 0 },
+    { n: "AssetMinder", label: SOURCES.assetminder, fresh: `${hhmm(s.clock - 10)} today`, state: "Legacy sample export", tone: "warn" as const, fields: ["Job number to Job", "Technician to Person", "Clock on/off to Time entry", "Registration to Vehicle"], rejected: 0, dups: 0 },
+    { n: "Sage", label: SOURCES.sage, fresh: "07:00 today", state: "Legacy sample snapshot", tone: "warn" as const, fields: ["Account to Company", "Invoice to Invoice snapshot", "Balance to Receivable (total)"], rejected: 1, dups: 0 },
+    { n: "Bizimply", label: SOURCES.bizimply, fresh: "08:00 today", state: "Sample report, API unconfirmed", tone: "warn" as const, fields: ["Employee to Person", "Status to Attendance (present, absent, training)", "Reason not imported"], rejected: 0, dups: 0 },
+    { n: "Renault order book", label: SOURCES.renault, fresh: s.imports.applied.length ? `${s.imports.history[0].at}` : "Mon 12 Oct", state: s.imports.applied.length ? "Applied, local" : "Diff pending", tone: s.imports.applied.length ? "ok" as const : "warn" as const, fields: ["SVO to Order reference", "VIN to Vehicle (when issued)", "ETA to Arrival date"], rejected: 0, dups: s.imports.history.filter(h => h.id.endsWith("repeat")).length },
   ];
-  return <Page><Head title="Integrations" sub="Simulated import histories. Source-specific states — not everything is green, and nothing here is a live connection." />
+  return <Page><Head title="Integrations" sub="Keyloop is the system of record. Pulse joins it to the channels below. This is a demo representation of the intended architecture; nothing here is a live connection." />
+    <div style={{ marginBottom: 14 }}><KeyloopPanel /></div>
+    <div className="d-eyebrow" style={{ margin: "18px 0 8px" }}>Other sources Pulse reads (simulated)</div>
+    <div className="r-src">
+      <SourceCard title="WhatsApp groups" rows={wa} note="Messages are read, matched to a vehicle, customer and job, and filed on the timeline." />
+      <SourceCard title="Email mailboxes" rows={mail} note="Shared mailboxes are matched the same way. Replies are drafted, never sent without approval." />
+      <SourceCard title="ANPR gate cameras" rows={cams} note="Planned integration. Each read is matched against Keyloop and the active job before the vehicle joins the yard." state="Simulated, planned" />
+      <SourceCard title="Renault notices" rows={[["Periodic inspection notices", `${NOTICES.length} on file`], ["Received today", `${NOTICES.filter(n => n.received.startsWith("2026-10-19")).length}`], ["Sender", "Renault Trucks Ireland"]]} note="Notices are matched to the customer and vehicle, then offered to Inspections for an approved reminder." />
+    </div>
+    <div className="d-eyebrow" style={{ margin: "22px 0 8px" }}>Legacy sample imports</div>
     <div className="d-grid d-g2">{srcs.map(x => <Card key={x.n} title={x.n} aside={<Chip tone={x.tone}>{x.state}</Chip>}>
-      <dl className="d-kv"><dt>Source</dt><dd>{x.label}</dd><dt>Freshness</dt><dd>{x.fresh}</dd><dt>Rejected rows</dt><dd>{x.rejected}{x.rejected ? " — invoice with no matching account (sample)" : ""}</dd><dt>Duplicate warnings</dt><dd>{x.dups}{x.dups ? " repeat import skipped" : ""}</dd></dl>
+      <dl className="d-kv"><dt>Source</dt><dd>{x.label}</dd><dt>Freshness</dt><dd>{x.fresh}</dd><dt>Rejected rows</dt><dd>{x.rejected}{x.rejected ? ", invoice with no matching account (sample)" : ""}</dd><dt>Duplicate warnings</dt><dd>{x.dups}{x.dups ? " repeat import skipped" : ""}</dd></dl>
       <div className="d-eyebrow" style={{ margin: "10px 0 4px" }}>Mapping preview</div>{x.fields.map(f => <div key={f} className="d-muted">· {f}</div>)}
-      <div className="d-row" style={{ marginTop: 10 }}><Btn sm disabled={x.n === "Keyloop"} onClick={() => A.toast(`Retry preview: would re-read the ${x.label}. Nothing sent.`)}>Retry preview</Btn></div>
+      <div className="d-row" style={{ marginTop: 10 }}><Btn sm onClick={() => A.toast(`Retry preview: would re-read the ${x.label}. Nothing sent.`)}>Retry preview</Btn></div>
     </Card>)}</div></Page>;
 }
 export function Governance() {

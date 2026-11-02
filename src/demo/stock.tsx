@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
 import { A, cname, eur, fmtDate, standingCost, useDerived, type Doc } from "./store";
 import { COMPANIES, ORDER_BOOK_NEXT, type Vehicle } from "./fixtures";
-import { Portal, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, Kpi, Metric, Note, NumInput, Page, ReadDrop, RoleHidden, Seg, Table, VLink, canSeeCost } from "./ui";
+import { Portal, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, Kpi, Metric, Note, NumInput, Page, ReadDrop, RoleHidden, Seg, Table, canSeeCost } from "./ui";
+import { RegLink as VLink } from "./recordNav";
+import { KeyloopBadge } from "./keyloop";
 import { go } from "./nav";
 
 const PROMISE: Record<string, string> = { V019: "2026-10-28" };
@@ -24,6 +26,7 @@ export function StockOverview() {
   return (
     <Page>
       <Head title="Vehicle stock" sub="Active stock reconciles as on-site + incoming. Confirmed sales sit in the Sold archive, outside active totals. Source: sample Renault order book + stock records.">
+        <KeyloopBadge />
         <Btn kind="primary" onClick={() => go("Stock", "instock")}>Browse stock</Btn>
       </Head>
       <div className="d-grid d-g5" style={{ marginBottom: 14 }}>

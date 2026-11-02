@@ -75,7 +75,7 @@ export const STAFF: Person[] = [
   P("p-s8", "Brian Costello", "Reception", "Management", "support", "brian.costello@example.com", false, "BC", "#e6c78a"),
   // Fifteen technicians. Billy, Edgar, Cian, Gennadiy, JJ and Ron match the names on
   // Anthony's existing planner and clocking tools; their jobs and figures are fictional.
-  P("t-billy", "Billy", "HGV technician", "Workshop", "technician", "billy@example.com", false, "BE", "#6C8CFF", "Billy Elliott"),
+  P("t-billy", "Billy", "HGV technician", "Workshop", "technician", "billy@example.com", false, "BE", "#6C8CFF", "Billy Murphy"),
   P("t-sean", "Seán", "HGV technician", "Workshop", "technician", "sean.doyle@example.com", false, "SD", "#6ad0f0", "Seán Doyle"),
   P("t-rachel", "Rachel", "Auto-electrician", "Workshop", "technician", "rachel.byrne@example.com", false, "RB", "#5fe0a8", "Rachel Byrne"),
   P("t-conor", "Conor", "LCV technician", "Workshop", "technician", "conor.keane@example.com", false, "CK", "#f0c04b", "Conor Keane"),
@@ -108,16 +108,25 @@ export interface Company {
   type: string;
   contact: string;
   email: string;
+  /** Preferred contact channel and number (demo values). */
+  channel?: "WhatsApp" | "Email" | "Phone";
+  phone?: string;
+  /** Account number in Keyloop (demo identifier). */
+  account?: string;
 }
 export const COMPANIES: Company[] = [
-  { id: "c-galway", name: "Galway Haulage", kind: "customer", type: "Fleet operator", contact: "Fergus Lally", email: "transport@example.com" },
-  { id: "c-mayo", name: "Mayo Logistics", kind: "customer", type: "Courier company", contact: "Paula Jennings", email: "ops@example.com" },
-  { id: "c-midlands", name: "Midlands Parcel Services", kind: "customer", type: "Courier company", contact: "Noel Grehan", email: "fleet@example.com" },
-  { id: "c-westway", name: "Westway Electrical", kind: "customer", type: "Trade", contact: "Mags Donlon", email: "mags@example.com" },
-  { id: "c-shannon", name: "Shannon Cold Chain", kind: "customer", type: "Fleet operator", contact: "Tadhg Ryan", email: "transport@example.com" },
-  { id: "c-corrib", name: "Corrib Plant Hire", kind: "customer", type: "Fleet operator", contact: "Alan Finnerty", email: "accounts@example.com" },
-  { id: "c-tuam", name: "Tuam Builders Providers", kind: "customer", type: "Trade", contact: "Mary Burke", email: "office@example.com" },
-  { id: "c-boyle", name: "Boyle Agri Contracts", kind: "customer", type: "Agri", contact: "Seán Óg Regan", email: "seanog@example.com" },
+  { id: "c-flynn", name: "Flynn Road Freight", kind: "customer", type: "Haulage operator", contact: "Declan Flynn", email: "declan@example.com", channel: "WhatsApp", phone: "+353 87 555 0142", account: "KL-C-20418" },
+  { id: "c-kelly", name: "Kelly Logistics", kind: "customer", type: "Fleet operator", contact: "Siobhán Kelly", email: "fleet@example.com", channel: "WhatsApp", phone: "+353 86 555 0177", account: "KL-C-20233" },
+  { id: "c-murphy", name: "Murphy Transport", kind: "customer", type: "Haulage operator", contact: "Tom Murphy", email: "tom@example.com", channel: "Email", phone: "+353 90 555 0129", account: "KL-C-19876" },
+  { id: "c-doyle", name: "Doyle Transport", kind: "customer", type: "Haulage operator", contact: "Mark Doyle", email: "mark@example.com", channel: "WhatsApp", phone: "+353 85 555 0163", account: "KL-C-20511" },
+  { id: "c-galway", name: "Galway Haulage", kind: "customer", type: "Fleet operator", contact: "Fergus Lally", email: "transport@example.com", channel: "Phone", phone: "+353 91 555 0118", account: "KL-C-18802" },
+  { id: "c-mayo", name: "Mayo Logistics", kind: "customer", type: "Courier company", contact: "Paula Jennings", email: "ops@example.com", channel: "Email", phone: "+353 94 555 0101", account: "KL-C-19344" },
+  { id: "c-midlands", name: "Midlands Parcel Services", kind: "customer", type: "Courier company", contact: "Noel Grehan", email: "fleet@example.com", channel: "Email", phone: "+353 90 555 0188", account: "KL-C-20067" },
+  { id: "c-westway", name: "Westway Electrical", kind: "customer", type: "Trade", contact: "Mags Donlon", email: "mags@example.com", channel: "Email", phone: "+353 90 555 0171", account: "KL-C-20590" },
+  { id: "c-shannon", name: "Shannon Cold Chain", kind: "customer", type: "Fleet operator", contact: "Tadhg Ryan", email: "transport@example.com", channel: "WhatsApp", phone: "+353 61 555 0134", account: "KL-C-19120" },
+  { id: "c-corrib", name: "Corrib Plant Hire", kind: "customer", type: "Fleet operator", contact: "Alan Finnerty", email: "accounts@example.com", channel: "Email", phone: "+353 91 555 0156", account: "KL-C-18455" },
+  { id: "c-tuam", name: "Tuam Builders Providers", kind: "customer", type: "Trade", contact: "Mary Burke", email: "office@example.com", channel: "Phone", phone: "+353 93 555 0123", account: "KL-C-19731" },
+  { id: "c-boyle", name: "Boyle Agri Contracts", kind: "customer", type: "Agri", contact: "Seán Óg Regan", email: "seanog@example.com", channel: "WhatsApp", phone: "+353 87 555 0190", account: "KL-C-20344" },
   { id: "s-renault", name: "Renault Trucks (manufacturer)", kind: "supplier", type: "Manufacturer · Renault Genuine Parts", contact: "—", email: "—" },
   { id: "s-cvparts", name: "Midland CV Factors", kind: "supplier", type: "Parts factor (fictional)", contact: "Order desk", email: "orders@example.com" },
 ];
@@ -126,7 +135,7 @@ export const COMPANIES: Company[] = [
 export interface ServiceVehicle { id: string; reg: string; model: string; kind: string; customer: string }
 const SV = (id: string, reg: string, model: string, kind: string, customer: string): ServiceVehicle => ({ id, reg, model, kind, customer });
 export const SERVICE_VEHICLES: ServiceVehicle[] = [
-  SV("C101", "181-G-4471", "Renault T480", "Tractor unit", "c-galway"),
+  SV("C101", "181-G-4471", "Renault Trucks T High", "Tractor unit", "c-flynn"),
   SV("C102", "191-LH-5530", "Renault D Wide", "Fridge rigid", "c-shannon"),
   SV("C103", "192-MO-882", "Renault Master", "Panel van", "c-mayo"),
   SV("C104", "201-G-1187", "Renault Trafic", "Van", "c-corrib"),
@@ -162,6 +171,33 @@ export const SERVICE_VEHICLES: ServiceVehicle[] = [
   SV("C134", "181-G-4033", "Renault Trafic", "Van", "c-corrib"),
   SV("C135", "211-MO-882", "Renault Master", "Panel van", "c-mayo"),
   SV("C136", "201-WH-1712", "Renault Master", "Panel van", "c-midlands"),
+  // Added for the yard model: customers who now appear across Reynolds' day.
+  SV("C137", "241-D-1821", "Renault Trucks C Range", "Rigid", "c-kelly"),
+  SV("C139", "231-D-8812", "Renault Trucks D Wide", "Rigid", "c-murphy"),
+  SV("C140", "201-D-5530", "Renault Trucks T High", "Tractor unit", "c-flynn"),
+  SV("C141", "192-D-6771", "Renault Trucks T", "Tractor unit", "c-doyle"),
+  SV("C142", "212-G-3390", "Renault Trucks T480", "Tractor unit", "c-galway"),
+  SV("C143", "202-D-1547", "Renault Trucks D Wide", "Rigid", "c-kelly"),
+  SV("C144", "211-D-9033", "Renault Trucks D Wide", "Rigid", "c-doyle"),
+  SV("C145", "202-G-5521", "Renault Trucks T High", "Tractor unit", "c-flynn"),
+  SV("C146", "192-D-0488", "Renault Trucks D", "Rigid", "c-murphy"),
+  SV("C147", "192-D-3411", "Renault Trucks C Range", "Rigid", "c-murphy"),
+  // Not on site: periodic-inspection notices from Renault.
+  SV("C150", "191-D-2811", "Renault Trucks T High", "Tractor unit", "c-doyle"),
+  SV("C151", "182-D-7740", "Renault Trucks D Wide", "Rigid", "c-murphy"),
+  SV("C152", "201-D-9902", "Renault Trucks T", "Tractor unit", "c-kelly"),
+  SV("C153", "211-G-2087", "Renault Trucks T480", "Tractor unit", "c-galway"),
+  SV("C154", "192-D-4415", "Renault Trucks C Range", "Rigid", "c-flynn"),
+  SV("C155", "181-D-6630", "Renault Trucks D", "Rigid", "c-doyle"),
+  SV("C156", "202-D-3358", "Renault Trucks T High", "Tractor unit", "c-murphy"),
+  SV("C157", "221-D-1129", "Renault Trucks D Wide", "Rigid", "c-kelly"),
+  SV("C158", "191-G-8841", "Renault Trucks T460", "Tractor unit", "c-galway"),
+  SV("C159", "212-D-5076", "Renault Trucks C Range", "Rigid", "c-flynn"),
+  SV("C160", "182-D-2209", "Renault Trucks D", "Rigid", "c-doyle"),
+  SV("C161", "201-D-7714", "Renault Trucks T", "Tractor unit", "c-murphy"),
+  // Not matched to a customer yet (yard unknowns).
+  SV("U001", "192-D-3417", "Unidentified commercial vehicle", "Unknown", ""),
+  SV("U002", "08-WH-1203", "Unidentified panel van", "Unknown", ""),
 ];
 
 /* ---- dealership stock -----------------------------------------------------
@@ -244,7 +280,7 @@ function mkStock(): Vehicle[] {
   out.push(base({ id: "V014", model: "Trafic", variant: "SL30 van", status: "reserved", customer: "c-tuam", receivedDaysAgo: 9, notes: "Awaiting finance documents" }, 14, 27200));
   out.push(base({ id: "V015", model: "Master", variant: "Dropside", status: "reserved", customer: "c-corrib", receivedDaysAgo: 30, notes: "Quote Q-1038 open" }, 15, 35600));
   out.push({
-    ...base({ id: "V008", model: "Master", variant: "Used panel van (2017)", status: "reserved", customer: "c-midlands", jobRef: "JOB-1046", reg: "171-WH-2290", receivedDaysAgo: 26, notes: "Used van — handover blocked by failed CVRT and open repair" }, 8, 11800, 600),
+    ...base({ id: "V008", model: "Master", variant: "Used panel van (2022)", status: "reserved", customer: "c-kelly", jobRef: "JOB-1046", reg: "222-G-1984", receivedDaysAgo: 26, notes: "Used van, handover blocked by failed CVRT and open repair" }, 8, 11800, 600),
     range: "Used & trade-in",
     vin: vin(8),
   });
@@ -322,41 +358,52 @@ export interface Job {
   hopper?: boolean;
   net?: number;
   invoice?: "ready" | "blocked";
-  partBlocker?: { part: string; eta: string; owner: string; supplier: string; received: boolean };
+  partBlocker?: {
+    part: string; eta: string; owner: string; supplier: string; received: boolean;
+    /** Purchase order and when it was placed. */
+    po?: string; orderedAt?: string;
+    /** True when work on the vehicle cannot continue until the part arrives. */
+    stalled?: boolean;
+    impact?: string;
+  };
   notes?: string;
   blockers?: string;
 }
 const J = (o: Job): Job => o;
 export const JOBS: Job[] = [
   // Billy's live job + his next
-  J({ id: "JOB-1042", status: "in_progress", tech: "t-billy", customer: "c-galway", vehicle: "C101", complaint: "Brake warning investigation — findings not yet confirmed", workType: "General workshop", budgetMin: 120, start: "08:15" }),
+  J({ id: "JOB-1042", status: "in_progress", tech: "t-billy", customer: "c-flynn", vehicle: "C101", complaint: "Engine fault investigation: ECU fault diagnosed", workType: "General workshop", budgetMin: 120, start: "08:15",
+    partBlocker: { part: "ECU (engine control unit)", eta: "Thu 22 Oct 10:00", owner: "p-darren", supplier: "Renault Parts", received: false, po: "PO-8821", orderedAt: "Fri 16 Oct 15:42", stalled: true, impact: "Vehicle cannot progress" } }),
   J({ id: "JOB-1043", status: "queued", tech: "t-billy", customer: "c-mayo", vehicle: "C103", complaint: "Scheduled service + brake check", workType: "General workshop", budgetMin: 90, plannedStart: "10:15" }),
   // Four unassigned hopper cards
-  J({ id: "JOB-1050", status: "queued", hopper: true, tech: null, customer: "c-corrib", vehicle: "C108", complaint: "Clutch slipping under load", workType: "General workshop", budgetMin: 150 }),
+  J({ id: "JOB-1050", status: "queued", hopper: true, tech: null, customer: "c-corrib", vehicle: "C108", complaint: "Clutch slipping under load", workType: "General workshop", budgetMin: 190,
+    partBlocker: { part: "Clutch kit, tipper", eta: "Wed 21 Oct 09:00", owner: "p-darren", supplier: "Midland CV Factors", received: false, po: "PO-8826", orderedAt: "Today 08:20", stalled: true, impact: "Cannot be started or scheduled" } }),
   J({ id: "JOB-1051", status: "queued", hopper: true, tech: null, customer: "c-tuam", vehicle: "C109", complaint: "CVRT preparation — brakes and lights", workType: "CVRT preparation", budgetMin: 120 }),
-  J({ id: "JOB-1052", status: "queued", hopper: true, tech: null, customer: "c-shannon", vehicle: "C110", complaint: "Fridge unit electrical fault", workType: "Auto-electrical", budgetMin: 180, blockers: "Fridge body supplier wiring diagram requested" }),
+  J({ id: "JOB-1052", status: "queued", hopper: true, tech: null, customer: "c-shannon", vehicle: "C110", complaint: "Fridge unit electrical fault", workType: "Auto-electrical", budgetMin: 210, blockers: "Fridge body supplier wiring diagram requested",
+    partBlocker: { part: "Fridge unit control module", eta: "Tue 20 Oct 12:00", owner: "p-darren", supplier: "Fridge body supplier", received: false, po: "PO-8829", orderedAt: "Fri 16 Oct 16:05", impact: "Diagnosis can start; repair waits for the module" } }),
   J({ id: "JOB-1053", status: "queued", hopper: true, tech: null, customer: "c-boyle", vehicle: "C111", complaint: "Tail-lift not raising", workType: "General workshop", budgetMin: 120 }),
   // Three more future assignments (queued total = 8)
   J({ id: "JOB-1054", status: "queued", tech: "t-sean", customer: "c-galway", vehicle: "C112", complaint: "Air leak diagnosis", workType: "General workshop", budgetMin: 90, plannedStart: "11:00" }),
   J({ id: "JOB-1055", status: "queued", tech: "t-conor", customer: "c-westway", vehicle: "V016", complaint: "Pre-delivery inspection", workType: "General workshop", budgetMin: 120, plannedStart: "13:00" }),
-  J({ id: "JOB-1056", status: "queued", tech: "t-rachel", customer: "c-galway", vehicle: "C113", complaint: "Trailer lighting fault", workType: "Auto-electrical", budgetMin: 90, plannedStart: "12:00" }),
+  J({ id: "JOB-1084", status: "queued", tech: "t-rachel", customer: "c-kelly", vehicle: "C137", complaint: "13-week inspection (Renault periodic)", workType: "General workshop", budgetMin: 120, plannedStart: "10:30" }),
   // Nine more in progress (10 total)
   J({ id: "JOB-1060", status: "in_progress", tech: "t-conor", customer: "c-shannon", vehicle: "C106", complaint: "Oil service + filters", workType: "General workshop", budgetMin: 120, start: "09:10" }),
   J({ id: "JOB-1062", status: "in_progress", tech: "t-mark", customer: "c-mayo", vehicle: "C114", complaint: "Brake overhaul, rear axle", workType: "General workshop", budgetMin: 240, start: "07:30" }),
   J({ id: "JOB-1063", status: "in_progress", tech: "t-padraig", customer: "c-corrib", vehicle: "C115", complaint: "Timing belt replacement", workType: "General workshop", budgetMin: 210, start: "09:00" }),
   J({ id: "JOB-1069", status: "in_progress", tech: "t-dylan", customer: "c-tuam", vehicle: "C116", complaint: "CVRT preparation before 11:30 test", workType: "CVRT preparation", budgetMin: 90, start: "09:30" }),
-  J({ id: "JOB-1064", status: "in_progress", tech: "t-robbie", customer: "c-shannon", vehicle: "C117", complaint: "DPF regeneration fault", workType: "General workshop", budgetMin: 180, start: "08:00" }),
+  J({ id: "JOB-1064", status: "in_progress", tech: "t-robbie", customer: "c-shannon", vehicle: "C117", complaint: "DPF regeneration fault", workType: "General workshop", budgetMin: 105, start: "08:00" }),
   J({ id: "JOB-1065", status: "in_progress", tech: "t-eoin", customer: "c-tuam", vehicle: "C118", complaint: "Suspension airbag replacement", workType: "General workshop", budgetMin: 150, start: "09:20" }),
-  J({ id: "JOB-1066", status: "in_progress", tech: "t-shane", customer: "c-galway", vehicle: "C119", complaint: "Gearbox oil leak", workType: "General workshop", budgetMin: 120, start: "08:32" }),
+  J({ id: "JOB-1066", status: "in_progress", tech: "t-shane", customer: "c-galway", vehicle: "C119", complaint: "Gearbox oil leak", workType: "General workshop", budgetMin: 120, start: "08:10",
+    partBlocker: { part: "Gearbox output seal kit", eta: "Today 15:30", owner: "p-darren", supplier: "Renault Parts", received: false, po: "PO-8830", orderedAt: "Today 08:40", impact: "Strip-down continues; reseal waits for the kit" } }),
   J({ id: "JOB-1067", status: "in_progress", tech: "t-ronan", customer: "c-mayo", vehicle: "C120", complaint: "Wheel alignment + tyres", workType: "General workshop", budgetMin: 90, start: "09:30" }),
   J({ id: "JOB-1068", status: "in_progress", tech: "t-fionn", customer: "c-boyle", vehicle: "C121", complaint: "Reversing camera install", workType: "Auto-electrical", budgetMin: 120, start: "09:05" }),
   // Three awaiting parts — JOB-1046 is the V008 CVRT repair
-  J({ id: "JOB-1046", status: "awaiting_parts", tech: "t-conor", customer: "c-midlands", vehicle: "V008", complaint: "Rear brake caliper seized — CVRT fail repair", workType: "CVRT preparation", budgetMin: 150, stoppedElapsed: 45,
-    partBlocker: { part: "Brake caliper, rear O/S", eta: "11:30", owner: "p-darren", supplier: "Renault Genuine Parts", received: false } }),
+  J({ id: "JOB-1046", status: "awaiting_parts", tech: "t-conor", customer: "c-kelly", vehicle: "V008", complaint: "Rear brake caliper seized — CVRT fail repair", workType: "CVRT preparation", budgetMin: 150, stoppedElapsed: 45,
+    partBlocker: { part: "Brake caliper, rear O/S", eta: "Today 11:30", owner: "p-darren", supplier: "Renault Genuine Parts", received: false, po: "PO-8817", orderedAt: "Fri 16 Oct 14:10", stalled: true, impact: "Blocks repair, retest and handover" } }),
   J({ id: "JOB-1047", status: "awaiting_parts", tech: "t-mark", customer: "c-shannon", vehicle: "C122", complaint: "Alternator replacement", workType: "Auto-electrical", budgetMin: 120, stoppedElapsed: 30,
-    partBlocker: { part: "Alternator 150A", eta: "14:00", owner: "p-darren", supplier: "Midland CV Factors", received: false } }),
+    partBlocker: { part: "Alternator 150A", eta: "Today 14:00", owner: "p-darren", supplier: "Midland CV Factors", received: false, po: "PO-8822", orderedAt: "Fri 16 Oct 15:55", stalled: true, impact: "Fridge rigid off road until fitted" } }),
   J({ id: "JOB-1048", status: "awaiting_parts", tech: "t-padraig", customer: "c-corrib", vehicle: "C104", complaint: "Headlamp unit replacement — CVRT fail repair", workType: "CVRT preparation", budgetMin: 90, stoppedElapsed: 20,
-    partBlocker: { part: "Headlamp unit, N/S", eta: "Tomorrow 09:00", owner: "p-darren", supplier: "Renault Genuine Parts", received: false } }),
+    partBlocker: { part: "Headlamp unit, N/S", eta: "Tue 20 Oct 09:00", owner: "p-darren", supplier: "Renault Genuine Parts", received: false, po: "PO-8824", orderedAt: "Fri 16 Oct 16:30", stalled: true, impact: "Blocks CVRT retest" } }),
   // Three awaiting quality check
   J({ id: "JOB-1070", status: "awaiting_qc", tech: "t-robbie", customer: "c-galway", vehicle: "C123", complaint: "Full service + CVRT prep", workType: "CVRT preparation", budgetMin: 180, stoppedElapsed: 175 }),
   J({ id: "JOB-1071", status: "awaiting_qc", tech: "t-eoin", customer: "c-mayo", vehicle: "C124", complaint: "Brake pads + discs, front", workType: "General workshop", budgetMin: 120, stoppedElapsed: 118 }),
@@ -371,6 +418,12 @@ export const JOBS: Job[] = [
     notes: "Traced intermittent fault to corroded earth strap behind cab. Cleaned + re-terminated. Tested OK." }),
   J({ id: "JOB-1073", status: "completed", invoice: "blocked", net: 500, tech: "t-eoin", customer: "c-mayo", vehicle: "C107", complaint: "Brake repair before retest", workType: "CVRT preparation", budgetMin: 60, stoppedElapsed: 58,
     notes: "Rear brake pipe replaced N/S. Bled system. Pedal firm." }),
+  // Five more invoice-ready jobs (HGV work with parts): 4,850 + 3,760 + 3,120 + 2,430 + 2,150 = €16,310.
+  J({ id: "JOB-1074", status: "completed", invoice: "ready", net: 4850, tech: "t-mark", customer: "c-flynn", vehicle: "C140", complaint: "Clutch and brake overhaul with full service", workType: "General workshop", budgetMin: 420, stoppedElapsed: 405 }),
+  J({ id: "JOB-1075", status: "completed", invoice: "ready", net: 3760, tech: "t-robbie", customer: "c-murphy", vehicle: "C139", complaint: "Air suspension replacement + inspection", workType: "General workshop", budgetMin: 330, stoppedElapsed: 340 }),
+  J({ id: "JOB-1076", status: "completed", invoice: "ready", net: 3120, tech: "t-shane", customer: "c-doyle", vehicle: "C141", complaint: "Gearbox reseal and clutch adjust", workType: "General workshop", budgetMin: 300, stoppedElapsed: 285 }),
+  J({ id: "JOB-1077", status: "completed", invoice: "ready", net: 2430, tech: "t-ronan", customer: "c-galway", vehicle: "C142", complaint: "Turbo replacement", workType: "General workshop", budgetMin: 240, stoppedElapsed: 232 }),
+  J({ id: "JOB-1078", status: "completed", invoice: "ready", net: 2150, tech: "t-fionn", customer: "c-kelly", vehicle: "C143", complaint: "Brake chambers + full service", workType: "General workshop", budgetMin: 210, stoppedElapsed: 205 }),
 ];
 
 /** Fixed sample job-card records behind the draft values. Not generated from prose. */
@@ -413,7 +466,7 @@ export interface CvrtBooking {
 export const CVRT: CvrtBooking[] = [
   { id: "T-301", vehicle: "C105", customer: "c-galway", time: "08:30", lane: "Lane 1", owner: "p-elizabeth", status: "completed", result: "pass", evidence: "Sample test sheet T-301" },
   { id: "T-302", vehicle: "C131", customer: "c-shannon", time: "09:00", lane: "Lane 1", owner: "p-elizabeth", status: "completed", result: "pass", evidence: "Sample test sheet T-302" },
-  { id: "T-303", vehicle: "V008", customer: "c-midlands", time: "09:30", lane: "Lane 2", owner: "p-elizabeth", status: "awaiting_repair", result: "fail", repairJob: "JOB-1046", failItems: ["Rear O/S brake imbalance", "Brake caliper seized"], evidence: "Sample test sheet T-303" },
+  { id: "T-303", vehicle: "V008", customer: "c-kelly", time: "09:30", lane: "Lane 2", owner: "p-elizabeth", status: "awaiting_repair", result: "fail", repairJob: "JOB-1046", failItems: ["Rear O/S brake imbalance", "Brake caliper seized"], evidence: "Sample test sheet T-303" },
   { id: "T-304", vehicle: "C104", customer: "c-corrib", time: "08:45", lane: "Lane 2", owner: "p-elizabeth", status: "awaiting_repair", result: "fail", repairJob: "JOB-1048", failItems: ["Headlamp unit damaged, N/S"], evidence: "Sample test sheet T-304" },
   { id: "T-305", vehicle: "C107", customer: "c-mayo", time: "11:00", lane: "Lane 1", owner: "p-elizabeth", status: "awaiting_retest", result: "fail", repairJob: "JOB-1073", failItems: ["Brake pipe corrosion, rear N/S"], evidence: "Sample test sheet T-305 (original fail)" },
   { id: "T-306", vehicle: "C116", customer: "c-tuam", time: "11:30", lane: "Lane 1", owner: "p-s7", status: "scheduled" },
@@ -471,6 +524,7 @@ export const RECEIVABLES: Receivable[] = [
   { id: "INV-2047", customer: "c-boyle", amount: 3600, due: "2026-10-09", owner: "p-caroline" },
   { id: "INV-2052", customer: "c-tuam", amount: 2400, due: "2026-10-16", owner: "p-s1" },
   { id: "INV-2058", customer: "c-shannon", amount: 7200, due: "2026-10-30", owner: "p-s1" },
+  { id: "INV-2062", customer: "c-murphy", amount: 4820, due: "2026-10-05", owner: "p-caroline" },
 ];
 
 /* ---- morning meeting sections: nine configurable, five enabled by default */

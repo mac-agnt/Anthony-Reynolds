@@ -3,10 +3,46 @@ import { arr, cat, css, txt } from "../../runtime/template";
 
 type Props = { v: any };
 
+const CARD = {"background":"var(--surface)","border":"1px solid var(--border)","borderRadius":"var(--card-r,18px)","backdropFilter":"blur(20px) saturate(1.3)","boxShadow":"var(--card-shadow)","padding":"20px 22px 12px"} as const;
+const TONE: Record<string, string> = { ok: "var(--ok)", warn: "var(--warn)", bad: "var(--bad)", acc: "var(--accent)" };
+const toneBg: Record<string, string> = { ok: "var(--ok-soft)", warn: "var(--warn-soft)", bad: "var(--bad-soft)", acc: "var(--accent-soft)" };
+
+function CardHead({ title, note, remove, edit, link }: { title: string; note?: string; remove: () => void; edit: boolean; link?: () => void }) {
+  return (
+    <div style={{"display":"flex","alignItems":"center","gap":"10px"}}>
+      <div style={{"flex":"1","fontSize":"13.5px","fontWeight":"500"}}>{title}</div>
+      {link && <button onClick={link} style={{"border":"0","background":"none","padding":"0","cursor":"pointer","fontFamily":"var(--mono)","fontSize":"9.5px","letterSpacing":"0.1em","color":"var(--accent)"}}>{"OPEN"}</button>}
+      {note && <span style={{"fontFamily":"var(--mono)","fontSize":"10.5px","color":"var(--faint)"}}>{note}</span>}
+      {edit && (
+        <button className="ixd" onClick={remove} title="Remove widget" style={{"width":"24px","height":"24px","flex":"none","border":"1px solid var(--border)","borderRadius":"8px","background":"var(--surface-2)","color":"var(--dim)","cursor":"pointer","display":"flex","alignItems":"center","justifyContent":"center"}}>
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M6 6l12 12 M18 6 6 18" /></svg>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function RailRows({ rows }: { rows: any[] }) {
+  return (
+    <div style={{"marginTop":"8px"}}>
+      {rows.map((r: any, i: number) => (
+        <div key={i} onClick={r.open} style={{"display":"flex","alignItems":"center","gap":"11px","padding":"11px 0","borderTop":"1px solid var(--border)","cursor":"pointer"}}>
+          <span style={{"width":"7px","height":"7px","borderRadius":"2px","flex":"none","background": r.tone ? TONE[r.tone] : "var(--faint)"}} />
+          <div style={{"flex":"1","minWidth":"0"}}>
+            <div style={{"fontSize":"12.5px","lineHeight":"1.35","overflow":"hidden","textOverflow":"ellipsis","whiteSpace":"nowrap"}}>{r.title}</div>
+            <div style={{"fontSize":"11px","color":"var(--dim)","marginTop":"2px","overflow":"hidden","textOverflow":"ellipsis","whiteSpace":"nowrap"}}>{r.sub}</div>
+          </div>
+          <span style={{"flex":"none","fontFamily":"var(--mono)","fontSize":"9.5px","letterSpacing":"0.06em","padding":"3px 7px","borderRadius":"var(--chip-r,6px)","color": r.tone ? TONE[r.tone] : "var(--dim)","background": r.tone ? toneBg[r.tone] : "var(--surface-2)","whiteSpace":"nowrap"}}>{r.tag}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function HomeWidgetRail({ v }: Props) {
   return (
     <>
-      <aside style={{"position":"relative","zIndex":"1","width":"352px","flex":"none","minHeight":"0","overflowY":"auto","display":"flex","flexDirection":"column","gap":"14px","padding":"2px 0 6px 20px"}}>
+      <aside data-home-rail="1" style={{"position":"relative","zIndex":"1","width":"352px","flex":"none","minHeight":"0","overflowY":"auto","display":"flex","flexDirection":"column","gap":"14px","padding":"2px 0 6px 20px"}}>
         <div style={{"flex":"0 0 auto","minWidth":"0","overflow":"hidden","display":"flex","flexWrap":"nowrap","alignItems":"center","justifyContent":"space-between","gap":"4px","padding":"2px 0 4px","fontFamily":"var(--mono)"}}>
           {arr(v.flipUnits).map((u: any, i15: number) => (
             <Fragment key={i15}>
@@ -91,6 +127,23 @@ export default function HomeWidgetRail({ v }: Props) {
             </div>
           </>
         )}
+        {v.show?.yard && (
+          <>
+            <div style={CARD}>
+              <CardHead title="Yard now" note="LIVE" remove={v.removeYard} edit={v.widgetEdit} link={v.rail?.yard?.open} />
+              <div style={{"display":"grid","gridTemplateColumns":"repeat(4,1fr)","gap":"8px","marginTop":"14px"}}>
+                {arr(v.rail?.yard?.tiles).map((t: any, i: number) => (
+                  <button key={i} onClick={t?.open} style={{"padding":"10px 7px","textAlign":"left","cursor":"pointer","background": t?.tone ? toneBg[t.tone] : "var(--surface-2)","border":"1px solid var(--border)","borderRadius":"var(--r-sm,12px)","minWidth":"0"}}>
+                    <div style={{"fontSize":"22px","fontWeight":"500","letterSpacing":"-.6px","lineHeight":"1","fontVariantNumeric":"tabular-nums","color": t?.tone ? TONE[t.tone] : "var(--ink)"}}>{txt(t?.value)}</div>
+                    <div style={{"fontSize":"10.5px","color":"var(--dim)","marginTop":"6px","overflow":"hidden","textOverflow":"ellipsis","whiteSpace":"nowrap"}}>{txt(t?.label)}</div>
+                  </button>
+                ))}
+              </div>
+              <div style={{"fontFamily":"var(--mono)","fontSize":"9.5px","letterSpacing":"0.12em","color":"var(--faint)","margin":"16px 0 0"}}>{"TOP BLOCKERS"}</div>
+              <RailRows rows={arr(v.rail?.yard?.blockers)} />
+            </div>
+          </>
+        )}
         {v.show?.inbox && (
           <>
             <div style={{"background":"var(--surface)","border":"1px solid var(--border)","borderRadius":"var(--card-r,18px)","backdropFilter":"blur(20px) saturate(1.3)","boxShadow":"var(--card-shadow)","transition":"transform .28s var(--ease),border-color .24s var(--ease),box-shadow .28s var(--ease)","padding":"20px 22px 10px"}}>
@@ -114,7 +167,7 @@ export default function HomeWidgetRail({ v }: Props) {
               <div style={{"marginTop":"8px"}}>
                 {arr(v.inboxTop).map((i: any, i18: number) => (
                   <Fragment key={i18}>
-                    <div onClick={i?.open} style={{"display":"flex","gap":"12px","padding":"12px 0","borderTop":"1px solid var(--border)","cursor":"pointer","transition":"background .2s var(--ease),padding-left .24s var(--ease)"}}>
+                    <div onClick={i?.action} style={{"display":"flex","gap":"12px","padding":"12px 0","borderTop":"1px solid var(--border)","cursor":"pointer","transition":"background .2s var(--ease),padding-left .24s var(--ease)"}}>
                       <span style={css(cat("width:7px;height:7px;border-radius:2px;flex:none;margin-top:5px;background:", i?.dot))} />
                       <div style={{"flex":"1","minWidth":"0"}}>
                         <div style={{"fontSize":"13px","lineHeight":"1.4"}}>
@@ -130,6 +183,11 @@ export default function HomeWidgetRail({ v }: Props) {
                     </div>
                   </Fragment>
                 ))}
+                {v.inboxMoreLabel && (
+                  <button onClick={v.toggleInboxAll} style={{"display":"block","width":"100%","padding":"11px 0","border":"0","borderTop":"1px solid var(--border)","background":"none","cursor":"pointer","textAlign":"left","fontSize":"12px","color":"var(--accent)"}}>
+                    {txt(v.inboxMoreLabel)}
+                  </button>
+                )}
                 {v.inboxEmpty && (
                   <>
                     <div style={{"padding":"20px 0 24px","borderTop":"1px solid var(--border)","textAlign":"center","fontSize":"12.5px","color":"var(--dim)"}}>
@@ -137,6 +195,39 @@ export default function HomeWidgetRail({ v }: Props) {
                     </div>
                   </>
                 )}
+              </div>
+            </div>
+          </>
+        )}
+        {v.show?.parts && (
+          <>
+            <div style={CARD}>
+              <CardHead title="Parts due today" remove={v.removeParts} edit={v.widgetEdit} link={v.rail?.parts?.open} />
+              <div style={{"fontSize":"11.5px","color":"var(--dim)","marginTop":"6px","lineHeight":"1.5"}}>{txt(v.rail?.parts?.summary)}</div>
+              <RailRows rows={arr(v.rail?.parts?.rows)} />
+            </div>
+          </>
+        )}
+        {v.show?.inspect && (
+          <>
+            <div style={CARD}>
+              <CardHead title="Inspection replies" remove={v.removeInspect} edit={v.widgetEdit} link={v.rail?.inspect?.open} />
+              <div style={{"fontSize":"11.5px","color":"var(--dim)","marginTop":"6px","lineHeight":"1.5"}}>{txt(v.rail?.inspect?.summary)}</div>
+              <RailRows rows={arr(v.rail?.inspect?.rows)} />
+            </div>
+          </>
+        )}
+        {v.show?.brief && (
+          <>
+            <div style={{...CARD,"paddingBottom":"18px"}}>
+              <CardHead title="Morning brief" remove={v.removeBrief} edit={v.widgetEdit} link={v.rail?.brief?.open} />
+              <div style={{"marginTop":"10px"}}>
+                {arr(v.rail?.brief?.lines).map((l: any, i: number) => (
+                  <div key={i} style={{"display":"flex","gap":"12px","padding":"9px 0","borderTop":"1px solid var(--border)"}}>
+                    <span style={{"flex":"none","width":"64px","fontFamily":"var(--mono)","fontSize":"9.5px","letterSpacing":"0.1em","color":"var(--faint)","textTransform":"uppercase","paddingTop":"2px"}}>{txt(l?.k)}</span>
+                    <span style={{"flex":"1","minWidth":"0","fontSize":"12px","lineHeight":"1.5","color":"var(--body)"}}>{txt(l?.v)}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </>

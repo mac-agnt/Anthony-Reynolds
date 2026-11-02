@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { A, cname, company, daysBetween, dur, elapsed, eur, fmtDate, handoverGates, person, pname, quoteGates, quoteTotals, standingCost, useDemo, vehicleLabel, type State } from "./store";
 import { RECEIVABLES, SERVICE_VEHICLES } from "./fixtures";
 import { go } from "./nav";
+import { openVehicle } from "./yard";
 import type { Job } from "./fixtures";
 
 
@@ -113,7 +114,8 @@ export function Table<T>({ cols, rows, onRow, rowKey, limit, selected, empty }: 
 export const VLink = ({ id }: { id: string }) => {
   const s = useDemo();
   const v = vehicleLabel(s, id);
-  return <button className="d-link" onClick={e => { e.stopPropagation(); A.open("vehicle", id); }}>{v.stock ? id : v.reg}</button>;
+  const yard = !v.stock || id === "V008";
+  return <button className="d-link" onClick={e => { e.stopPropagation(); if (yard) { A.close(); openVehicle(id); } else A.open("vehicle", id); }}>{v.stock ? id : v.reg}</button>;
 };
 export const JLink = ({ id }: { id: string }) => <button className="d-link" onClick={e => { e.stopPropagation(); A.open("job", id); }}>{id}</button>;
 export const CLink = ({ id }: { id: string | null | undefined }) => id ? <button className="d-link" onClick={e => { e.stopPropagation(); A.open("company", id); }}>{cname(id)}</button> : <span className="d-faint">—</span>;

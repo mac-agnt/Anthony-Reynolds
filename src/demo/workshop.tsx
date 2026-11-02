@@ -1,11 +1,15 @@
-import { useState, type DragEvent, type ReactNode } from "react";
+import { useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   A, BREAK, DAY_END, DAY_START, JOB_CARD_FACTS, RATE, blocksFor, cardFor, checkSlot, cname, dur, elapsed, eur, fridayIntervals, hhmm, hrs, mondayIntervals,
-  pname, techNow, techs, toMin, useDerived, vehicleLabel, type Interval, type State, type TechNow,
+  person, pname, techs, toMin, useDerived, vehicleLabel, type Derived, type Interval, type State, type TechNow,
 } from "./store";
 import { ATTENDANCE, COMPANIES, FRIDAY_INTERNAL, FRIDAY_UNALLOC, ON_CALL, type Job } from "./fixtures";
-import { Portal, Avatar, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, JobChip, Kpi, Metric, Note, NumInput, Page, Plate, ReadDrop, Seg, Table, VLink, canSeeMoney } from "./ui";
+import { Portal, Avatar, Bar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, JLink, JobChip, Kpi, Metric, Note, NumInput, Page, Plate, ReadDrop, Seg, Table, VLink, canSeeMoney, type Col } from "./ui";
 import { go } from "./nav";
+import { partsOverview, techName, workshopOverview, yardCounts, yardVehicles, type YardVehicle } from "./yard";
+import { RECEIVED_POS, RESERVED_PARTS } from "./yardData";
+import { KeyloopBadge } from "./keyloop";
+import "./workshop2.css";
 
 /* ---- timeline geometry: default 07:30–17:30 axis ------------------------- */
 const AX0 = toMin("07:30"), AX1 = toMin("17:30"), PX = 1.55;
@@ -25,58 +29,280 @@ function Axis() {
 }
 function TrackBg({ now }: { now?: number }) {
   return <>
-    <div className="tl-break" style={{ left: X(BREAK[0]), width: W(BREAK[0], BREAK[1]) }} title="Break 12:30–13:00" />
+    <div className="tl-break" style={{ left: X(BREAK[0]), width: W(BREAK[0], BREAK[1]) }} title="Break 12:30 to 13:00" />
     {now !== undefined && <div className="tl-now" style={{ left: X(now) }} title={`Now ${hhmm(now)}`} />}
   </>;
 }
 
-/* ═════════════════════════ OVERVIEW ═════════════════════════ */
+/* ---- shared helpers for the control room, live board and parts ----------- */
+const partName = (p: string) => p.replace(/ \(.*\)/, "");
+const fullName = (id: string | null | undefined) => person(id)?.fullName ?? pname(id);
+/** 87.5 stays 87.5, 91.67 becomes 92, 114.3 becomes 114. */
+const fmtPct = (p: number) => (Math.abs(p * 2 - Math.round(p * 2)) < 1e-6 ? String(+p.toFixed(1)) : String(Math.round(p)));
+const NUM_WORDS = ["Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve"];
+const numWord = (n: number) => NUM_WORDS[n] ?? String(n);
+/** "Fri 16 Oct 15:42" or "Today 11:30" to a sortable ISO key. */
+function whenKey(t: string | undefined): string {
+  if (!t) return "";
+  const time = /(\d{2}:\d{2})/.exec(t)?.[1] ?? "00:00";
+  const m = /(\d{1,2}) Oct/.exec(t);
+  return `2026-10-${t.startsWith("Today") || !m ? "19" : m[1].padStart(2, "0")}T${time}`;
+}
+const openBlocker = (j: Job) => (j.partBlocker && !j.partBlocker.received ? j.partBlocker : null);
+const isStalled = (j: Job) => { const pb = openBlocker(j); return !!pb && (!!pb.stalled || j.status === "awaiting_parts"); };
+
+function PartTag({ j, compact }: { j: Job; compact?: boolean }) {
+  const pb = j.partBlocker;
+  if (!pb) return null;
+  if (pb.received) return <div className="w-part ok"><b>Part received</b><span>{pb.po ?? "PO"} · {partName(pb.part)}</span></div>;
+  const stalled = isStalled(j);
+  return (
+    <div className={"w-part " + (stalled ? "stalled" : "")} title={pb.impact}>
+      <b>{stalled ? "Waiting for part · stalled" : "Waiting for part · work continues"}</b>
+      <span>{pb.po ?? "PO"} · {partName(pb.part)} · ETA {pb.eta}</span>
+      {!compact && pb.impact && <span className="w-part-i">{pb.impact}</span>}
+    </div>
+  );
+}
+
+/** One job as a block in a technician lane: vehicle, customer, job, budget, actual, %, status, parts blocker. */
+function JobBlock({ s, j, next, onMove }: { s: State; j: Job; next?: Job; onMove?: (j: Job) => void }) {
+  const el = elapsed(j, s.clock);
+  const started = j.status !== "queued";
+  const pct = started ? (el / j.budgetMin) * 100 : 0;
+  const live = j.status === "in_progress";
+  const over = live && pct > s.rules.over, warn = live && pct >= s.rules.warn;
+  const tone = over ? "bad" : warn ? "warn" : "";
+  const [label, ctone]: [string, "ok" | "warn" | "bad" | "acc" | undefined] =
+    live ? (over ? ["Over budget", "bad"] : warn ? ["Warning triggered", "warn"] : ["On job", "acc"])
+      : j.status === "awaiting_parts" ? ["Awaiting parts", "warn"] : j.status === "awaiting_qc" ? ["Awaiting QC", "warn"]
+        : j.hopper && !j.tech ? ["Unassigned", undefined] : [`Planned ${j.plannedStart ?? ""}`.trim(), undefined];
+  return (
+    <article className={"w-job " + tone + (started ? "" : " planned")} aria-label={`${j.id} ${cname(j.customer)}`}>
+      <header className="w-job-h"><span className="w-reg"><VLink id={j.vehicle} /></span><span className="w-cust">{cname(j.customer)}</span><JLink id={j.id} /></header>
+      <div className="w-what">{j.complaint}</div>
+      <div className="w-figs">
+        <div><i>Budget</i><b>{j.budgetMin} min</b></div>
+        <div><i>Actual</i><b>{started ? `${el} min` : "Not started"}</b></div>
+        <div className={tone}><i>Time budget</i><b>{started ? `${fmtPct(pct)}%` : "0%"}</b></div>
+      </div>
+      <Bar parts={[[Math.min(el, j.budgetMin), over ? "var(--bad)" : warn ? "var(--warn)" : "var(--accent)", "Used"], [Math.max(0, j.budgetMin - el), "var(--track)", "Remaining"]]} />
+      <div className="d-row" style={{ gap: 6 }}><Chip tone={ctone}>{label}</Chip>{live && warn && <span className="w-pct d-mono">{fmtPct(pct)}% TIME BUDGET</span>}</div>
+      <PartTag j={j} compact />
+      {warn && <div className="d-row" style={{ gap: 6 }}>
+        <Btn sm onClick={() => A.extendBudget(j.id, 30, "Diagnosis needs more time, reviewed by service manager")}>Extend +30 min</Btn>
+        {next && onMove && <Btn sm kind="primary" onClick={() => onMove(next)}>Move next job</Btn>}
+      </div>}
+    </article>
+  );
+}
+
+/* ═════════════════════════ OVERVIEW: operations control room ═════════════════════════ */
+type LaneFilter = "all" | "exceptions" | "over" | "unalloc" | "parts";
+const pc = (m: number) => ((Math.max(AX0, Math.min(AX1, m)) - AX0) / (AX1 - AX0)) * 100;
+
+function jobsOf(s: State, techId: string): Job[] {
+  const rank = (j: Job) => (j.status === "in_progress" ? 0 : j.status === "awaiting_parts" ? 1 : j.status === "awaiting_qc" ? 2 : 3);
+  return s.jobs.filter(j => j.tech === techId && j.status !== "completed")
+    .sort((a, b) => rank(a) - rank(b) || toMin(a.plannedStart ?? "23:59") - toMin(b.plannedStart ?? "23:59"));
+}
+function laneInfo(s: State, d: Derived, tn: TechNow) {
+  const jobs = jobsOf(s, tn.id);
+  const flag = d.budgetFlags.find(f => f.j.tech === tn.id);
+  const over = !!flag && flag.pct > s.rules.over;
+  const warn = !!flag && !over;
+  const idle = tn.state === "unallocated";
+  const idleFlag = idle && (tn.gapMin ?? 0) > s.rules.gap;
+  const parts = jobs.some(j => !!openBlocker(j));
+  const stalled = jobs.some(isStalled);
+  const off = tn.state === "absent" || tn.state === "training";
+  const score = idleFlag ? 0 : over ? 1 : warn ? 2 : stalled ? 3 : parts ? 4 : idle ? 5 : off ? 7 : 6;
+  const load = blocksFor(s, tn.id).reduce((a, b) => a + Math.max(0, Math.min(b.to, DAY_END) - Math.max(b.from, DAY_START)), 0) / 60;
+  return { tn, jobs, over, warn, idle, idleFlag, parts, stalled, off, score, load };
+}
+type Lane = ReturnType<typeof laneInfo>;
+const matches = (l: Lane, f: LaneFilter) =>
+  f === "all" ? true : f === "over" ? l.over || l.warn : f === "unalloc" ? l.idle : f === "parts" ? l.parts : l.over || l.warn || l.idleFlag || l.stalled;
+
+function Strip({ s, l }: { s: State; l: Lane }) {
+  const { tn } = l;
+  const seg = (key: string, a: number, b: number, cls: string, title: string) =>
+    <span key={key} className={"w-seg " + cls} title={title} style={{ left: `${pc(a)}%`, width: `${Math.max(0.5, pc(b) - pc(a))}%` }} />;
+  const bits: ReactNode[] = [seg("brk", BREAK[0], BREAK[1], "brk", "Break 12:30 to 13:00")];
+  if (tn.state === "training") bits.push(seg("tr", DAY_START, DAY_END, "train", "Approved off-site training"));
+  l.jobs.forEach(j => {
+    if (j.status === "in_progress" && j.start) {
+      const a = toMin(j.start), b = a + j.budgetMin, pctUsed = ((s.clock - a) / j.budgetMin) * 100;
+      const tone = pctUsed > s.rules.over ? "bad" : pctUsed >= s.rules.warn ? "warn" : "";
+      bits.push(seg("p" + j.id, a, b, "plan", `${j.id} budget ${hhmm(a)} to ${hhmm(b)}`));
+      bits.push(seg("u" + j.id, a, Math.max(a + 1, s.clock), "used " + tone, `${j.id} clocked on ${j.start}`));
+    } else if (j.status === "queued" && j.plannedStart) {
+      const a = toMin(j.plannedStart);
+      bits.push(seg("q" + j.id, a, a + j.budgetMin, "plan", `${j.id} planned ${hhmm(a)} to ${hhmm(a + j.budgetMin)}`));
+    }
+  });
+  if (l.idle && tn.since) bits.push(seg("gap", toMin(tn.since), s.clock, "gap", `No job clocking since ${tn.since}`));
+  return <div className="w-strip" role="img" aria-label={`${pname(tn.id)} timeline`}>{bits}<span className="w-now" style={{ left: `${pc(s.clock)}%` }} title={`Now ${hhmm(s.clock)}`} /></div>;
+}
+
+function LaneRow({ s, l, onMove }: { s: State; l: Lane; onMove: (j: Job) => void }) {
+  const { tn } = l;
+  const p = person(tn.id);
+  const tone = l.idleFlag || l.over ? "bad" : l.warn || l.stalled ? "warn" : "";
+  const live = l.jobs.find(j => j.status === "in_progress");
+  const nextQ = l.jobs.find(j => j.status === "queued" && j.plannedStart);
+  return (
+    <div className={"w-lane " + tone + (l.off ? " off" : "")}>
+      <div className="w-who">
+        <div className="d-row" style={{ gap: 8, flexWrap: "nowrap" }}><Avatar id={tn.id} size={26} /><div className="d-grow"><b>{fullName(tn.id)}</b><div className="d-muted" style={{ fontSize: 11 }}>{p?.role}</div></div></div>
+        <div className="d-row" style={{ gap: 6 }}>
+          {tn.state === "on_job" && <Chip tone={l.over ? "bad" : l.warn ? "warn" : "acc"}>{l.over ? "Over budget" : l.warn ? "On job, watch" : "On job"}</Chip>}
+          {tn.state === "unallocated" && <Chip tone={l.idleFlag ? "bad" : "warn"}>Unallocated</Chip>}
+          {tn.state === "absent" && <Chip>Absent</Chip>}{tn.state === "training" && <Chip>Training</Chip>}
+          {!l.off && <span className="d-mono d-faint">{l.load.toFixed(1)} / 8.0 h</span>}
+        </div>
+      </div>
+      <div className="w-main">
+        {l.off ? <div className="d-muted">{tn.state === "absent" ? "Absent today. Not counted as idle time." : "Approved off-site training. Not counted as idle time."}</div> : <>
+          <Strip s={s} l={l} />
+          {l.idle && <div className={"w-idle " + (l.idleFlag ? "" : "soft")}>
+            <b>PRESENT, UNALLOCATED · {tn.gapMin ?? 0} MIN</b>
+            <span className="d-muted">No job clocking since {tn.since}. Not on an approved break.</span>
+            <span className="d-grow" />
+            <LaneReason tn={tn} />
+          </div>}
+          <div className="w-cards">{l.jobs.map(j => <JobBlock key={j.id} s={s} j={j} next={j === live ? nextQ : undefined} onMove={onMove} />)}
+            {!l.jobs.length && !l.idle && <span className="d-muted">No open jobs.</span>}</div>
+        </>}
+      </div>
+    </div>
+  );
+}
+
+function LaneReason({ tn }: { tn: TechNow }) {
+  const [open, setOpen] = useState(false);
+  const [r, setR] = useState("Waiting on a road test slot");
+  if (tn.reason) return <span className="d-muted">Reason recorded: {tn.reason}</span>;
+  return open ? (
+    <span className="d-row" style={{ gap: 6 }}>
+      <select className="d-select" value={r} onChange={e => setR(e.target.value)} aria-label="Reason">
+        {["Waiting on a road test slot", "Helping on another job (not clocked)", "Collecting parts from stores", "Waiting for job allocation", "Other, follow up"].map(x => <option key={x}>{x}</option>)}
+      </select>
+      <Btn sm kind="primary" onClick={() => { A.liveReason(tn.id, r); setOpen(false); }}>Save</Btn>
+    </span>
+  ) : <span className="d-row" style={{ gap: 6 }}><Btn sm onClick={() => setOpen(true)}>Record a reason</Btn><Btn sm kind="ghost" onClick={A.allocationTask}>Create review task</Btn></span>;
+}
+
+function Tile({ label, value, unit, hint, tone, onClick }: { label: string; value: ReactNode; unit?: ReactNode; hint: ReactNode; tone?: "warn" | "bad"; onClick: () => void }) {
+  return (
+    <button type="button" className={"w-kpi " + (tone ?? "")} onClick={onClick}>
+      <span className="w-kpi-l">{label}</span>
+      <span className="w-kpi-v">{value}{unit && <small>{unit}</small>}</span>
+      <span className="w-kpi-h">{hint}</span>
+    </button>
+  );
+}
+
+interface Exc { k: string; tone: "bad" | "warn"; tag: string; text: ReactNode; act?: ReactNode; wide?: boolean; n?: number }
+
 export function WorkshopOverview() {
   const [s, d] = useDerived();
+  const wo = workshopOverview(s), po = partsOverview(s), yc = yardCounts(s);
+  const [filter, setFilter] = useState<LaneFilter>("all");
+  const [moving, setMoving] = useState<Job | null>(null);
+  const lanesRef = useRef<HTMLDivElement>(null);
+  const show = (f: LaneFilter) => { setFilter(f); requestAnimationFrame(() => lanesRef.current?.scrollIntoView({ block: "start" })); };
+  const money = canSeeMoney(s);
+
+  const lanes = d.tn.map(t => laneInfo(s, d, t));
+  const shown = lanes.filter(l => matches(l, filter)).sort((a, b) => a.score - b.score);
+  const count = (f: LaneFilter) => lanes.filter(l => matches(l, f)).length;
+
+  const overN = d.budgetFlags.filter(f => f.pct > s.rules.over).length;
+  const flagText = d.budgetFlags.map(f => `${techName(f.j.tech)} ${fmtPct(f.pct)}%`).join(" · ");
+  const gapText = d.tn.filter(t => t.state === "unallocated").map(t => `${techName(t.id)} ${t.gapMin ?? 0} min`).join(" · ");
+
+  const exceptions: Exc[] = [
+    ...d.budgetFlags.map(f => {
+      const over = f.pct > s.rules.over;
+      return { k: "b" + f.j.id, tone: over ? "bad" as const : "warn" as const, tag: over ? "Over budget" : "Time budget",
+        text: <><b>{fullName(f.j.tech)}</b> · <JLink id={f.j.id} /> · <VLink id={f.j.vehicle} /> {cname(f.j.customer)} · {elapsed(f.j, s.clock)} / {f.j.budgetMin} min · <b>{fmtPct(f.pct)}% TIME BUDGET</b> · {over ? "Over budget" : "Warning triggered"}</>,
+        act: <Btn sm onClick={() => A.extendBudget(f.j.id, 30, "Diagnosis needs more time, reviewed by service manager")}>Extend +30 min</Btn> };
+    }),
+    ...d.gaps.map(g => ({ k: "g" + g.id, tone: "bad" as const, tag: "Unallocated",
+      text: <><b>{fullName(g.id)}</b> PRESENT, UNALLOCATED · {g.gapMin ?? 0} MIN <span className="d-muted">(no job clocking since {g.since}{g.reason ? `, reason: ${g.reason}` : ""})</span></>,
+      act: <Btn sm onClick={() => show("unalloc")}>Open lane</Btn> })),
+    ...(po.stalled.length ? [{ k: "parts", tone: "warn" as const, tag: "Part stalls", wide: true, n: po.stalled.length,
+      text: <><b>{po.stalled.length} jobs cannot move until a part arrives</b> <span className="d-muted">({yc.parts.length} vehicles stalled in the yard, {po.lostHours.toFixed(1)} h of capacity at risk)</span>
+        <div className="w-sub">{po.stalled.map(j => <span key={j.id}><JLink id={j.id} /> · <VLink id={j.vehicle} /> {cname(j.customer)} · {partName(j.partBlocker!.part)} · {j.partBlocker!.po} · ETA {j.partBlocker!.eta}</span>)}</div></>,
+      act: <Btn sm onClick={() => go("Workshop", "parts")}>Parts &amp; Blockers</Btn> }] : []),
+    ...(d.blocked.length ? [{ k: "wu", tone: "warn" as const, tag: "Write-up", n: 1, text: <>{d.blocked.length} completed jobs cannot be invoiced until the technician confirms the write-up: {d.blocked.map(j => j.id).join(", ")}{money ? ` (${eur(d.blockedNet)})` : ""}</>, act: <Btn sm onClick={() => go("Workshop", "jobcards")}>Job Cards</Btn> }] : []),
+  ];
+  const excCount = exceptions.reduce((t, e) => t + (e.n ?? 1), 0);
+  const nextOf = (j: Job) => s.jobs.filter(x => x.tech === j.tech && x.status === "queued" && x.plannedStart).sort((a, b) => toMin(a.plannedStart!) - toMin(b.plannedStart!))[0];
   const statusParts: [number, string, string][] = [
     [d.queued.length, "var(--track)", `Queued ${d.queued.length}`], [d.inProgress.length, "var(--accent)", `In progress ${d.inProgress.length}`],
-    [d.awaitingParts.length, "var(--warn)", `Awaiting parts ${d.awaitingParts.length}`], [d.awaitingQc.length, "#c8b4f0", `Awaiting QC ${d.awaitingQc.length}`],
+    [d.awaitingParts.length, "var(--warn)", `Awaiting parts ${d.awaitingParts.length}`], [d.awaitingQc.length, "var(--ok)", `Awaiting QC ${d.awaitingQc.length}`],
   ];
-  const exceptions: { k: string; tone: "bad" | "warn"; text: ReactNode; act: ReactNode }[] = [
-    ...d.gaps.map(g => ({ k: "g" + g.id, tone: "bad" as const, text: <><b>{pname(g.id)}</b> present, no job clocking since {g.since} ({dur(g.gapMin ?? 0)}){g.reason ? ` — reason: ${g.reason}` : ""}</>, act: <Btn sm onClick={() => go("Workshop", "live")}>Live Board</Btn> })),
-    ...d.budgetFlags.map(f => ({ k: "b" + f.j.id, tone: "warn" as const, text: <><b>{pname(f.j.tech)}</b> · <JLink id={f.j.id} /> has used {elapsed(f.j, s.clock)} of {f.j.budgetMin} min ({Math.round(f.pct)}% of budget)</>, act: <Btn sm onClick={() => go("Workshop", "live")}>Review</Btn> })),
-    ...d.awaitingParts.filter(j => !j.partBlocker?.received).map(j => ({ k: "p" + j.id, tone: "warn" as const, text: <><JLink id={j.id} /> waiting on {j.partBlocker?.part} · ETA {j.partBlocker?.eta}</>, act: <Btn sm onClick={() => go("Workshop", "parts")}>Parts</Btn> })),
-    ...d.blocked.map(j => ({ k: "w" + j.id, tone: "warn" as const, text: <><JLink id={j.id} /> completed — write-up blocked{canSeeMoney(s) ? ` (${eur(j.net ?? 0)})` : ""}</>, act: <Btn sm onClick={() => go("Workshop", "jobcards")}>Job Cards</Btn> })),
-  ];
-  const nextUp = s.jobs.filter(j => j.status === "queued" && j.plannedStart && toMin(j.plannedStart) >= s.clock).sort((a, b) => toMin(a.plannedStart!) - toMin(b.plannedStart!)).slice(0, 5);
+  const ticks: number[] = []; for (let m = toMin("08:00"); m <= toMin("17:00"); m += 60) ticks.push(m);
+
   return (
     <Page>
-      <Head title="Workshop today" sub={<>Monday 19 October · demo snapshot {hhmm(s.clock)} · source: sample AssetMinder export and sample Bizimply report</>}>
+      <Head title="Workshop control room" sub={<>Monday 19 October · snapshot {hhmm(s.clock)} · jobs, budgets and purchase orders joined to the live clockings. <KeyloopBadge /></>}>
+        <Btn onClick={() => go("Workshop", "planner")}>Planner</Btn>
         <Btn kind="primary" onClick={() => go("Workshop", "live")}>Open Live Board</Btn>
       </Head>
-      <div className="d-grid d-g5" style={{ marginBottom: 14 }}>
-        <Metric label="On a job" value={`${d.counts.onJob} / 15`} hint={`${d.counts.unallocated} unallocated · ${d.counts.absent} absent · ${d.counts.training} training`} />
-        <Metric label="Live gaps" value={d.gaps.length} tone={d.gaps.length ? "bad" : undefined} hint={`present, no job clocking > ${s.rules.gap} min`} />
-        <Metric label="Budget warnings" value={d.budgetFlags.length} tone={d.budgetFlags.length ? "warn" : undefined} hint={`≥ ${s.rules.warn}% of approved time`} />
-        <Metric label="Open jobs" value={d.open.length} hint={`${d.queued.length} queued · ${d.hopper.length} in hopper`} />
-        <Metric label="Completed, not invoiced" value={d.completed.length} hint={`${d.ready.length} ready · ${d.blocked.length} need write-up`} />
+
+      <div className="w-kpis">
+        <Tile label="Open jobs" value={wo.openJobs} hint={`${d.inProgress.length} in progress · ${d.queued.length} queued · ${d.awaitingParts.length} awaiting parts · ${d.awaitingQc.length} in QC`} onClick={() => go("Workshop", "planner")} />
+        <Tile label="Active technicians" value={wo.activeTechs} unit={`of ${d.tn.length}`} hint={`${d.counts.absent} absent · ${d.counts.training} training · ${d.counts.onJob} on a job now`} onClick={() => go("Workshop", "live")} />
+        <Tile label="Utilisation" value={`${wo.utilisation}%`} hint={`${d.counts.onJob} of ${wo.activeTechs} present technicians clocked on`} tone={wo.utilisation < 80 ? "warn" : undefined} onClick={() => go("Workshop", "clocking")} />
+        <Tile label="Waiting parts" value={po.open.length} tone={po.open.length ? "warn" : undefined} hint={`${yc.parts.length} stall a vehicle in the yard · ${po.lostHours.toFixed(1)} h capacity at risk`} onClick={() => go("Workshop", "parts")} />
+        <Tile label="Over budget" value={wo.overBudget} tone={overN ? "bad" : wo.overBudget ? "warn" : undefined} hint={flagText || "No job past the warning level"} onClick={() => show("over")} />
+        <Tile label="Ready to invoice" value={wo.readyToInvoice} unit={money ? eur(wo.readyNet) : undefined} hint={money ? `${d.blocked.length} more need a write-up first` : "Amounts hidden in this role"} onClick={() => go("Finance", "readiness")} />
+        <Tile label="Unallocated" value={d.counts.unallocated} tone={d.gaps.length ? "bad" : undefined} hint={gapText || "Everyone present is on a job"} onClick={() => show("unalloc")} />
       </div>
-      <div className="d-split">
-        <div className="d-grid">
-          <Card title={<>Exceptions to act on <span className="d-muted">({exceptions.length})</span></>}>
-            {exceptions.length ? <div className="d-list">{exceptions.map(e => <div className="d-li" key={e.k}><Chip tone={e.tone}>{e.tone === "bad" ? "Gap" : "Watch"}</Chip><div className="d-grow">{e.text}</div>{e.act}</div>)}</div> : <Empty>Nothing needs attention right now.</Empty>}
-          </Card>
-          <Card title="Mechanic load today" aside={<Btn sm kind="ghost" onClick={() => go("Workshop", "planner")}>Planner</Btn>}>
-            <div className="d-grid" style={{ gap: 7 }}>{techs.map(t => {
-              const tn = techNow(s, t.id); const load = blocksFor(s, t.id).reduce((a, b) => a + Math.min(b.to, DAY_END) - Math.max(b.from, DAY_START), 0) / 60;
-              return <div key={t.id} className="d-row" style={{ gap: 10 }}><span style={{ width: 130 }} className="d-muted">{t.name}</span>
-                <div className="d-grow"><Bar parts={tn.state === "absent" || tn.state === "training" ? [[1, "var(--track)", tn.state]] : [[load, "var(--accent)", "Loaded"], [Math.max(0, 8 - load), "var(--track)", "Spare"]]} /></div>
-                <span className="d-mono" style={{ width: 92, textAlign: "right" }}>{tn.state === "absent" ? "Absent" : tn.state === "training" ? "Training" : `${load.toFixed(1)} / 8.0 h`}</span></div>;
-            })}</div>
-          </Card>
+
+      <Card className="w-exc-card" title={<>Exceptions <span className="d-muted">({excCount})</span></>}
+        aside={<span className="d-row" style={{ gap: 6 }}>
+          <Chip tone={overN ? "bad" : d.budgetFlags.length ? "warn" : undefined}>Budget {d.budgetFlags.length}</Chip>
+          <Chip tone={d.gaps.length ? "bad" : undefined}>Unallocated {d.gaps.length}</Chip>
+          <Chip tone={po.stalled.length ? "warn" : undefined}>Part stalls {po.stalled.length}</Chip>
+        </span>}>
+        {exceptions.length ? <div className="w-excs">{exceptions.map(e => (
+          <div key={e.k} className={"w-exc " + e.tone + (e.wide ? " wide" : "")}>
+            <span className={"w-tag " + e.tone}>{e.tag}</span>
+            <div className="w-exc-t">{e.text}</div>
+            {e.act}
+          </div>))}</div> : <Empty>Nothing needs attention right now.</Empty>}
+      </Card>
+
+      <div style={{ height: 14 }} />
+      <section className="d-card flush w-board" ref={lanesRef} aria-label="Technician lanes">
+        <div className="w-board-h">
+          <div><b style={{ fontSize: 13.5 }}>Today's technicians</b> <span className="d-muted">{shown.length} of {lanes.length} lanes · line marks {hhmm(s.clock)}</span></div>
+          <Seg value={filter} onChange={setFilter} label="Lane filter" options={[["all", "All"], ["exceptions", `Exceptions ${count("exceptions")}`], ["over", `Over budget ${count("over")}`], ["unalloc", `Unallocated ${count("unalloc")}`], ["parts", `Parts ${count("parts")}`]]} />
         </div>
+        <div className="w-axis"><span className="d-eyebrow">Technician</span><div className="w-ticks" aria-hidden>{ticks.map(m => <i key={m} style={{ left: `${pc(m)}%` }}>{hhmm(m)}</i>)}</div></div>
+        {shown.length ? shown.map(l => <LaneRow key={l.tn.id} s={s} l={l} onMove={setMoving} />) : <div style={{ padding: 14 }}><Empty>No technician matches this filter.</Empty></div>}
+        <div className="w-legend d-muted">
+          <span><i className="used" />Clocked time</span><span><i className="plan" />Job budget or planned slot</span><span><i className="gap" />Present, no job clocking</span><span><i className="brk" />Break</span>
+        </div>
+      </section>
+
+      <div style={{ height: 14 }} />
+      <div className="d-split">
+        <Card title={<>Unassigned job queue <span className="d-muted">({d.hopper.length})</span></>} aside={<Btn sm onClick={() => go("Workshop", "planner")}>Allocate in Planner</Btn>}>
+          {d.hopper.length ? <div className="w-cards">{d.hopper.map(j => <JobBlock key={j.id} s={s} j={j} />)}</div> : <Empty>Every job has a technician.</Empty>}
+        </Card>
         <div className="d-grid">
-          <Card title="Job status (open)"><Bar parts={statusParts} /><div className="d-row" style={{ marginTop: 10, gap: 14 }}>{statusParts.map(p => <span key={p[2]} className="d-row" style={{ gap: 6 }}><i style={{ width: 8, height: 8, borderRadius: 3, background: p[1] }} /><span className="d-muted">{p[2]}</span></span>)}</div>
-            <Note>{d.open.length} open = {d.queued.length} queued + {d.inProgress.length} in progress + {d.awaitingParts.length} awaiting parts + {d.awaitingQc.length} awaiting QC. Completed jobs counted separately.</Note></Card>
-          <Card title="Coming up next">{nextUp.length ? <div className="d-list">{nextUp.map(j => <div className="d-li" key={j.id}><span className="d-mono">{j.plannedStart}</span><JLink id={j.id} /><span className="d-grow d-muted">{pname(j.tech)} · {cname(j.customer)}</span></div>)}</div> : <Empty>Nothing else scheduled today.</Empty>}</Card>
+          <Card title="Job status (open)"><Bar parts={statusParts} />
+            <div className="d-row" style={{ marginTop: 10, gap: 14 }}>{statusParts.map(p => <span key={p[2]} className="d-row" style={{ gap: 6 }}><i style={{ width: 8, height: 8, borderRadius: 3, background: p[1] }} /><span className="d-muted">{p[2]}</span></span>)}</div>
+            <Note>{wo.openJobs} open = {d.queued.length} queued + {d.inProgress.length} in progress + {d.awaitingParts.length} awaiting parts + {d.awaitingQc.length} awaiting QC.</Note></Card>
           <Card title="Vehicles arriving this week">{d.incoming.filter(v => v.eta && v.eta <= "2026-10-26").map(v => <div className="d-li" key={v.id}><VLink id={v.id} /><span className="d-grow d-muted">Renault {v.model} {v.variant}</span><span className="d-mono">{v.eta?.slice(5)}</span></div>)}</Card>
         </div>
       </div>
+      {moving && <Portal><MoveDialog job={moving} onClose={() => setMoving(null)} /></Portal>}
     </Page>
   );
 }
@@ -86,7 +312,7 @@ function MoveDialog({ job, onClose }: { job: Job; onClose: () => void }) {
   const [s] = useDerived();
   const [tech, setTech] = useState(job.tech ?? techs[0].id);
   const [time, setTime] = useState(job.plannedStart ? hhmm(toMin(job.plannedStart) + 30) : "10:45");
-  const [reason, setReason] = useState("Billy's brake investigation needs more time");
+  const [reason, setReason] = useState("Previous job is running over its time budget");
   const err = checkSlot(s, job.id, tech, toMin(time));
   return (
     <div className="d-modal-scrim" onClick={onClose}>
@@ -98,7 +324,7 @@ function MoveDialog({ job, onClose }: { job: Job; onClose: () => void }) {
             <Field label="Start"><input className="d-input" type="time" step={900} value={time} onChange={e => setTime(e.target.value)} /></Field>
           </div>
           <Field label="Reason (recorded in Activity)"><input className="d-input" value={reason} onChange={e => setReason(e.target.value)} /></Field>
-          {err ? <Flag tone="bad">{err}</Flag> : <Flag tone="ok">Fits: {hhmm(toMin(time))}–{hhmm(toMin(time) + job.budgetMin)} with {pname(tech)}. Planner and morning meeting update together. Scheduling does not clock anyone on.</Flag>}
+          {err ? <Flag tone="bad">{err}</Flag> : <Flag tone="ok">Fits: {hhmm(toMin(time))} to {hhmm(toMin(time) + job.budgetMin)} with {pname(tech)}. Planner and morning meeting update together. Scheduling does not clock anyone on.</Flag>}
           <div className="d-row"><span className="d-grow" /><Btn onClick={onClose}>Cancel</Btn><Btn kind="primary" disabled={!!err || !reason.trim()} onClick={() => { if (!A.moveJob(job.id, tech, toMin(time), reason)) onClose(); }}>Move job</Btn></div>
         </div>
       </div>
@@ -113,7 +339,7 @@ function ReasonEditor({ tn }: { tn: TechNow }) {
   return open ? (
     <div className="d-row" style={{ gap: 6 }}>
       <select className="d-select" style={{ flex: 1 }} value={r} onChange={e => setR(e.target.value)} aria-label="Reason">
-        {["Waiting on a road test slot", "Helping on another job (not clocked)", "Collecting parts from stores", "Waiting for job allocation", "Other — follow up"].map(x => <option key={x}>{x}</option>)}
+        {["Waiting on a road test slot", "Helping on another job (not clocked)", "Collecting parts from stores", "Waiting for job allocation", "Other, follow up"].map(x => <option key={x}>{x}</option>)}
       </select>
       <Btn sm kind="primary" onClick={() => { A.liveReason(tn.id, r); setOpen(false); }}>Save</Btn>
     </div>
@@ -123,40 +349,48 @@ function ReasonEditor({ tn }: { tn: TechNow }) {
 export function LiveTiles() {
   const [s, d] = useDerived();
   const [moving, setMoving] = useState<Job | null>(null);
-  const order = (t: TechNow) => t.state === "unallocated" ? 0 : t.state === "on_job" ? (d.budgetFlags.some(f => f.j.id === t.job?.id) ? 1 : 2) : 3;
-  const list = [...d.tn].sort((a, b) => order(a) - order(b));
+  const list = d.tn.map(t => laneInfo(s, d, t)).sort((a, b) => a.score - b.score);
   return (
     <>
-      <div className="live-grid">{list.map(tn => {
-        const p = techs.find(t => t.id === tn.id)!;
+      <div className="live-grid">{list.map(l => {
+        const tn = l.tn;
+        const p = person(tn.id)!;
         const j = tn.job;
         const el = j ? elapsed(j, s.clock) : 0;
         const pct = j ? (el / j.budgetMin) * 100 : 0;
-        const warn = j && pct >= s.rules.warn;
-        const over = j && pct > s.rules.over;
-        const gap = tn.state === "unallocated" && (tn.gapMin ?? 0) > s.rules.gap;
+        const warn = !!j && pct >= s.rules.warn;
+        const over = !!j && pct > s.rules.over;
+        const gap = l.idleFlag;
+        const parked = l.jobs.filter(x => x.status === "awaiting_parts" || x.status === "awaiting_qc");
         return (
-          <div key={tn.id} className={"tile " + (gap ? "gap" : warn ? "warn" : tn.state === "absent" || tn.state === "training" ? "off" : "")}>
-            <div className="tile-head"><Avatar id={tn.id} /><div className="d-grow"><b>{p.name}</b><div className="d-muted" style={{ fontSize: 11 }}>{p.role}</div></div>
-              {tn.state === "on_job" && <Chip tone={over ? "bad" : warn ? "warn" : "acc"}>{over ? "Over budget" : warn ? "Budget warning" : "On job"}</Chip>}
-              {tn.state === "unallocated" && <Chip tone={gap ? "bad" : "warn"}>No job clocking</Chip>}
+          <div key={tn.id} className={"tile " + (gap ? "gap" : over ? "over" : warn ? "warn" : l.off ? "off" : "")}>
+            <div className="tile-head"><Avatar id={tn.id} /><div className="d-grow"><b>{fullName(tn.id)}</b><div className="d-muted" style={{ fontSize: 11 }}>{p.role}</div></div>
+              {tn.state === "on_job" && <Chip tone={over ? "bad" : warn ? "warn" : "acc"}>{over ? "Over budget" : warn ? "Warning triggered" : "On job"}</Chip>}
+              {tn.state === "unallocated" && <Chip tone={gap ? "bad" : "warn"}>Unallocated</Chip>}
               {tn.state === "absent" && <Chip>Absent</Chip>}{tn.state === "training" && <Chip>Approved training</Chip>}
             </div>
             <div className="tile-cur">
               {j ? <>
-                <div className="d-row" style={{ gap: 8 }}><b style={{ fontSize: 14 }}>{vehicleLabel(s, j.vehicle).reg}</b><span className="d-muted">{cname(j.customer)}</span></div>
+                <div className="d-row" style={{ gap: 8 }}><b className="w-reg" style={{ fontSize: 14 }}><VLink id={j.vehicle} /></b><span className="d-muted">{cname(j.customer)}</span></div>
                 <div>{j.complaint}</div>
                 <div className="d-row" style={{ gap: 8 }}><div className="d-grow"><Bar parts={[[Math.min(el, j.budgetMin), over ? "var(--bad)" : warn ? "var(--warn)" : "var(--accent)", "Used"], [Math.max(0, j.budgetMin - el), "var(--track)", "Remaining"]]} /></div>
                   <span className="d-mono">{el}/{j.budgetMin} min</span></div>
-                <div className="d-muted" style={{ fontSize: 11 }}>{warn ? `${pct.toFixed(1)}% of approved time used — elapsed vs budget, not % of work done. ` : ""}<JLink id={j.id} /> · owner Jonathan Keenan · clocked {j.start}</div>
-                {warn && <div className="d-row" style={{ gap: 6 }}><Btn sm onClick={() => A.extendBudget(j.id, 30, "Diagnosis needs more time — reviewed by service manager")}>Extend budget +30m</Btn>{tn.next && <Btn sm kind="primary" onClick={() => setMoving(tn.next!)}>Move next job</Btn>}</div>}
+                {warn && <div className={"w-alert " + (over ? "bad" : "warn")}><b>{fmtPct(pct)}% TIME BUDGET</b> · {over ? "Over budget" : "Warning triggered"} <span className="d-muted">(elapsed against approved time, not % of work done)</span></div>}
+                <div className="d-muted" style={{ fontSize: 11 }}><JLink id={j.id} /> · owner Jonathan Keenan · clocked {j.start}</div>
+                <PartTag j={j} />
+                {warn && <div className="d-row" style={{ gap: 6 }}><Btn sm onClick={() => A.extendBudget(j.id, 30, "Diagnosis needs more time, reviewed by service manager")}>Extend budget +30m</Btn>{tn.next && <Btn sm kind="primary" onClick={() => setMoving(tn.next!)}>Move next job</Btn>}</div>}
               </> : tn.state === "unallocated" ? <>
-                <div style={{ fontSize: 14 }}><b>No job clocking</b> since {tn.since}</div>
-                <div className="d-muted">{dur(tn.gapMin ?? 0)} present and unallocated · not on an approved break</div>
+                <div className="w-alert bad" style={!gap ? { borderColor: "var(--warn)", background: "var(--warn-soft)" } : undefined}><b>PRESENT, UNALLOCATED · {tn.gapMin ?? 0} MIN</b></div>
+                <div className="d-muted">No job clocking since {tn.since}. Not on an approved break.</div>
                 <ReasonEditor tn={tn} />
-              </> : <div className="d-muted">{tn.state === "absent" ? "Absent today — not counted as idle time. Reason not shown." : "Off-site approved training — not counted as idle time."}</div>}
+              </> : <div className="d-muted">{tn.state === "absent" ? "Absent today. Not counted as idle time. Reason not shown." : "Off-site approved training. Not counted as idle time."}</div>}
+              {parked.map(x => (
+                <div key={x.id} className="w-parked">
+                  <div className="d-row" style={{ gap: 6 }}><JLink id={x.id} /><VLink id={x.vehicle} /><span className="d-muted">{cname(x.customer)}</span><Chip tone="warn">{x.status === "awaiting_parts" ? "Awaiting parts" : "Awaiting QC"}</Chip></div>
+                  <PartTag j={x} compact />
+                </div>))}
             </div>
-            <div className="tile-next">Next: {tn.next ? <><b style={{ color: "var(--ink)" }}>{tn.next.plannedStart}</b> <JLink id={tn.next.id} /> {cname(tn.next.customer)} · {vehicleLabel(s, tn.next.vehicle).reg}</> : "nothing scheduled"}</div>
+            <div className="tile-next"><span style={{ minWidth: 0 }}>Next: {tn.next ? <><b style={{ color: "var(--ink)" }}>{tn.next.plannedStart}</b> <JLink id={tn.next.id} /> {cname(tn.next.customer)} · <VLink id={tn.next.vehicle} /></> : "nothing scheduled"}</span></div>
           </div>
         );
       })}</div>
@@ -167,16 +401,22 @@ export function LiveTiles() {
 
 export function LiveBoard() {
   const [s, d] = useDerived();
+  const wo = workshopOverview(s), po = partsOverview(s);
+  const overN = d.budgetFlags.filter(f => f.pct > s.rules.over).length;
   return (
     <Page>
-      <Head title="Live Board" sub={<>Current time view from the same records as the Planner. Demo snapshot {hhmm(s.clock)}; data is frozen unless you advance the simulation.</>}>
+      <Head title="Live Board" sub={<>Current time view from the same records as the Planner. Demo snapshot {hhmm(s.clock)}; data is frozen unless you advance the simulation. <KeyloopBadge /></>}>
         <Chip>Clock {hhmm(s.clock)}</Chip><Btn onClick={() => A.advance(15)}>Simulate +15 min</Btn>{s.clock !== 600 && <Btn kind="ghost" onClick={A.resetClock}>Back to 10:00</Btn>}
       </Head>
-      <div className="d-grid d-g4" style={{ marginBottom: 14 }}>
-        <Metric label="On a job" value={d.counts.onJob} /><Metric label="Present, unallocated" value={d.counts.unallocated} tone={d.gaps.length ? "bad" : undefined} />
-        <Metric label="Absent" value={d.counts.absent} hint="not flagged as idle" /><Metric label="Approved training" value={d.counts.training} hint="not flagged as idle" />
+      <div className="d-grid" style={{ marginBottom: 14, gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
+        <Metric label="On a job" value={d.counts.onJob} hint={`${wo.utilisation}% utilisation`} />
+        <Metric label="Present, unallocated" value={d.counts.unallocated} tone={d.gaps.length ? "bad" : undefined} hint={d.tn.filter(t => t.state === "unallocated").map(t => `${techName(t.id)} ${t.gapMin ?? 0} min`).join(" · ")} />
+        <Metric label="Time budget flags" value={d.budgetFlags.length} tone={overN ? "bad" : d.budgetFlags.length ? "warn" : undefined} hint={d.budgetFlags.map(f => `${techName(f.j.tech)} ${fmtPct(f.pct)}%`).join(" · ")} />
+        <Metric label="Waiting parts" value={po.open.length} tone={po.open.length ? "warn" : undefined} hint={`${po.lostHours.toFixed(1)} h capacity at risk`} onClick={() => go("Workshop", "parts")} />
+        <Metric label="Absent" value={d.counts.absent} hint="not flagged as idle" />
+        <Metric label="Approved training" value={d.counts.training} hint="not flagged as idle" />
       </div>
-      <Note>Technician states sum to 15. Watchdog rules (configurable demo assumptions): gap over {s.rules.gap} min · warn at {s.rules.warn}% of approved budget · over budget above {s.rules.over}%.</Note>
+      <Note>Technician states sum to {d.tn.length}. Watchdog rules (configurable demo assumptions): gap over {s.rules.gap} min · warn at {s.rules.warn}% of approved budget · over budget above {s.rules.over}%.</Note>
       <div style={{ height: 12 }} />
       <LiveTiles />
     </Page>
@@ -380,7 +620,7 @@ function AllocateForm({ job, reason, setReason, onDone }: { job: Job; reason: st
     <div className="d-grid" style={{ gap: 10 }}>
       <div className="d-muted">{cname(job.customer)} · {job.complaint} · {dur(job.budgetMin)} · {job.workType}</div>
       <div className="d-grid d-g3">
-        <Field label="Technician"><select className="d-select" value={tech} onChange={e => setTech(e.target.value)}>{techs.map(t => <option key={t.id} value={t.id}>{t.name} — {t.role}{ATTENDANCE[t.id] ? ` (${ATTENDANCE[t.id]})` : ""}</option>)}</select></Field>
+        <Field label="Technician"><select className="d-select" value={tech} onChange={e => setTech(e.target.value)}>{techs.map(t => <option key={t.id} value={t.id}>{t.name}, {t.role}{ATTENDANCE[t.id] ? ` (${ATTENDANCE[t.id]})` : ""}</option>)}</select></Field>
         <Field label="Start"><input className="d-input" type="time" step={900} value={time} onChange={e => setTime(e.target.value)} /></Field>
         <Field label="Reason"><input className="d-input" value={reason} onChange={e => setReason(e.target.value)} /></Field>
       </div>
@@ -419,7 +659,7 @@ export function Clocking() {
 
   const exportCsv = () => {
     const rows = [["Technician", "Attendance h", "Job h", "Breaks h", "Internal h", "Explained h", "Unexplained h"], ...totals.map(x => [x.t.name, x.r.att, x.r.job, x.r.brk, x.r.internal, x.r.explained, x.r.gap].map(v => typeof v === "number" ? v.toFixed(2) : v))];
-    const blob = new Blob(["# SAMPLE DATA — Reynolds demo, not a payroll or accounting record\n" + rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
+    const blob = new Blob(["# SAMPLE DATA: Reynolds demo, not a payroll or accounting record\n" + rows.map(r => r.join(",")).join("\n")], { type: "text/csv" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `clocking-${day === "fri" ? "2026-10-16" : "2026-10-19-partial"}-sample.csv`; a.click();
   };
   return (
@@ -441,9 +681,9 @@ export function Clocking() {
       <div className="d-grid d-g4" style={{ marginBottom: 14 }}>
         <div title={`Job-allocated hours ÷ (attendance − approved breaks) = ${sum.job.toFixed(1)} ÷ (${sum.att.toFixed(1)} − ${sum.brk.toFixed(1)}). Internal work stays in the denominator.`}>
           <Metric label="Job allocation rate" value={(rate * 100).toFixed(1) + "%"} hint={`${sum.job.toFixed(1)} h ÷ (${sum.att.toFixed(1)} − ${sum.brk.toFixed(1)}) h · hover for formula`} /></div>
-        <Metric label="Unallocated — review" value={hrs(sum.gap)} tone={sum.gap ? "bad" : undefined}
-          hint={canSeeMoney(s) ? <>{eur(sum.gap * RATE)} potential labour billing equivalent at the demo €{RATE}/h — investigate. Not lost revenue.</> : "Investigate"} />
-        <Metric label="Missing clock-offs" value={0} hint={day === "mon" ? `${running} live clockings running — not missing` : "complete day"} />
+        <Metric label="Unallocated, review" value={hrs(sum.gap)} tone={sum.gap ? "bad" : undefined}
+          hint={canSeeMoney(s) ? <>{eur(sum.gap * RATE)} potential labour billing equivalent at the demo €{RATE}/h. Investigate. Not lost revenue.</> : "Investigate"} />
+        <Metric label="Missing clock-offs" value={0} hint={day === "mon" ? `${running} live clockings running, not missing` : "complete day"} />
         <Metric label="Roster status" value={day === "fri" ? "15 / 15 attended" : `${15 - d.counts.absent - d.counts.training} present`} hint={day === "fri" ? "Sample Bizimply report" : `${d.counts.absent} absent · ${d.counts.training} training (not idle)`} />
       </div>
       {day === "fri" && <Card style={{ marginBottom: 14 }} title="Friday reconciliation" aside={<span className="d-muted">buckets sum to paid attendance</span>}>
@@ -451,7 +691,7 @@ export function Clocking() {
         <div className="d-row" style={{ marginTop: 9, gap: 16 }}>
           <span>Paid <b>{sum.att.toFixed(1)}</b></span><span className="d-muted">= job {sum.job.toFixed(1)} + breaks {sum.brk.toFixed(1)} + internal {sum.internal.toFixed(1)}{sum.explained ? ` + reviewed ${sum.explained.toFixed(1)}` : ""} + unallocated {sum.gap.toFixed(1)}</span>
         </div>
-        <Note>Reclassifying a gap moves it out of “unallocated” — it never becomes job time or billable work. Original clock events are kept.</Note>
+        <Note>Reclassifying a gap moves it out of “unallocated”. It never becomes job time or billable work. Original clock events are kept.</Note>
       </Card>}
       <div className={pick ? "d-side d-side-r300" : "d-grid"}>
         {view === "timeline" ? (
@@ -511,7 +751,7 @@ export function Clocking() {
 function GapPanel({ day, pick, close }: { day: "fri" | "mon"; pick: { tech: string; iv: Interval }; close: () => void }) {
   const [s] = useDerived();
   const [cls, setCls] = useState<"internal" | "explained">("explained");
-  const [reason, setReason] = useState("Waiting for parts from stores — confirmed by technician");
+  const [reason, setReason] = useState("Waiting for parts from stores, confirmed by technician");
   const { iv } = pick;
   const all = intervalsFor(s, day, pick.tech);
   const idx = all.indexOf(all.find(x => x.from === iv.from)!);
@@ -523,7 +763,7 @@ function GapPanel({ day, pick, close }: { day: "fri" | "mon"; pick: { tech: stri
         {iv.kind === "gap" && <><dt>Clock-off</dt><dd className="d-mono">{hhmm(iv.from)} {before?.label ? `· ${before.label}` : ""}</dd><dt>Next clock-on</dt><dd className="d-mono">{after ? `${hhmm(after.from)} · ${after.label ?? after.kind}` : day === "mon" ? "none yet (live)" : "—"}</dd></>}
         <dt>Source</dt><dd>Sample AssetMinder export · raw events unchanged</dd></dl>
       <div className="d-divider" />
-      {iv.kind !== "gap" ? <span className="d-muted">{iv.label}</span> : day === "mon" ? <><Note>Live gap — record a reason on the Live Board. Raw clocking stays as imported.</Note><Btn sm style={{ marginTop: 8 }} onClick={() => go("Workshop", "live")}>Open Live Board</Btn></> : rev ? (
+      {iv.kind !== "gap" ? <span className="d-muted">{iv.label}</span> : day === "mon" ? <><Note>Live gap: record a reason on the Live Board. Raw clocking stays as imported.</Note><Btn sm style={{ marginTop: 8 }} onClick={() => go("Workshop", "live")}>Open Live Board</Btn></> : rev ? (
         <div className="d-grid" style={{ gap: 8 }}><Flag tone="ok">Classified as {rev.cls === "internal" ? "internal work" : "explained non-job time"} by {rev.by} at {rev.at}: “{rev.reason}”</Flag><Btn sm onClick={() => A.undoFriday(iv.gapId!)}>Revert classification</Btn></div>
       ) : (
         <div className="d-grid" style={{ gap: 8 }}>
@@ -669,41 +909,165 @@ export function JobCards() {
 }
 
 /* ═════════════════════════ PARTS & BLOCKERS ═════════════════════════ */
+interface PartRow { j: Job; pb: NonNullable<Job["partBlocker"]>; v: YardVehicle | undefined; stalled: boolean; group: number; lost: number }
+/** Renault Parts and Renault Genuine Parts are one supplier relationship for the summary. */
+const supplierKey = (name: string) => (/^Renault/i.test(name) ? "Renault Parts" : name);
+const etaClock = (eta: string) => { const m = /(\d{2}:\d{2})/.exec(eta); return m ? toMin(m[1]) : null; };
+const until = (mins: number) => (mins >= 0 ? `in ${dur(mins)}` : `${dur(-mins)} overdue`);
+
+function StatusChip({ r }: { r: PartRow }) {
+  if (r.pb.received) return <Chip tone="ok">Received</Chip>;
+  if (r.group === 0) return <Chip tone="bad">Stalled in yard</Chip>;
+  if (r.stalled) return <Chip tone="bad">Stalled</Chip>;
+  return <Chip tone="warn">Work continues</Chip>;
+}
+
 export function Parts() {
-  const [s, d] = useDerived();
-  const reserved = [
-    { part: "Brake pads, rear axle set", job: "JOB-1062", qty: 2, supplier: "Renault Genuine Parts", status: "Issued" },
-    { part: "Timing belt kit", job: "JOB-1063", qty: 1, supplier: "Renault Genuine Parts", status: "Issued" },
-    { part: "Airbag, rear suspension", job: "JOB-1065", qty: 2, supplier: "Midland CV Factors (fictional)", status: "Reserved" },
-    { part: "Reversing camera kit", job: "JOB-1068", qty: 1, supplier: "Midland CV Factors (fictional)", status: "Reserved" },
+  const [s] = useDerived();
+  const po = partsOverview(s), yc = yardCounts(s);
+  const veh = yardVehicles(s);
+  const rows: PartRow[] = s.jobs.filter(j => j.partBlocker).map(j => {
+    const pb = j.partBlocker!;
+    const v = veh.find(x => x.key === j.vehicle);
+    const stalled = isStalled(j);
+    return { j, pb, v, stalled, group: pb.received ? 3 : v?.status === "waiting_parts" ? 0 : stalled ? 1 : 2, lost: pb.received ? 0 : Math.max(0, j.budgetMin - elapsed(j, s.clock)) };
+  }).sort((a, b) => a.group - b.group || whenKey(a.pb.orderedAt).localeCompare(whenKey(b.pb.orderedAt)));
+  const open = rows.filter(r => !r.pb.received);
+  const inYard = open.filter(r => r.group === 0), otherStalled = open.filter(r => r.group === 1), continues = open.filter(r => r.group === 2);
+  const lostRows = [...open].sort((a, b) => b.lost - a.lost);
+  const maxLost = Math.max(1, ...lostRows.map(r => r.lost));
+  const today = open.filter(r => r.pb.eta.startsWith("Today")).sort((a, b) => (etaClock(a.pb.eta) ?? 0) - (etaClock(b.pb.eta) ?? 0));
+  const justIn = rows.filter(r => r.pb.received);
+  const received = [
+    ...justIn.map(r => ({ po: r.pb.po ?? "PO", part: partName(r.pb.part), supplier: r.pb.supplier, job: r.j.id, vehicle: r.j.vehicle, received: `Today ${hhmm(s.clock)} (in Pulse)`, owner: r.pb.owner })),
+    ...RECEIVED_POS,
   ];
-  const blockers = s.jobs.filter(j => j.partBlocker);
+  const suppliers = [...new Set(open.map(r => supplierKey(r.pb.supplier)))].map(name => {
+    const mine = open.filter(r => supplierKey(r.pb.supplier) === name);
+    const next = [...mine].sort((a, b) => whenKey(a.pb.eta).localeCompare(whenKey(b.pb.eta)))[0];
+    return { name, mine, stalled: mine.filter(r => r.stalled).length, next, back: RECEIVED_POS.filter(x => supplierKey(x.supplier) === name).length, raw: [...new Set(mine.map(r => r.pb.supplier))] };
+  }).sort((a, b) => whenKey(a.next.pb.eta).localeCompare(whenKey(b.next.pb.eta)));
+
+  const cols: Col<PartRow>[] = [
+    { key: "v", label: "Vehicle", render: r => <div style={{ whiteSpace: "nowrap" }}><VLink id={r.j.vehicle} /><div className="d-muted" style={{ fontSize: 11 }}>{cname(r.j.customer)}</div></div>, sort: r => r.v?.reg ?? r.j.vehicle },
+    { key: "j", label: "Job", render: r => <><JLink id={r.j.id} /><div className="d-muted" style={{ fontSize: 11 }}>{techName(r.j.tech)}</div></>, sort: r => r.j.id },
+    { key: "p", label: "Required part", render: r => <b style={{ fontWeight: 600 }}>{partName(r.pb.part)}</b>, sort: r => r.pb.part },
+    { key: "s", label: "Supplier", render: r => r.pb.supplier, sort: r => r.pb.supplier },
+    { key: "po", label: "PO", render: r => <span className="d-mono" style={{ whiteSpace: "nowrap" }}>{r.pb.po ?? "None"}</span>, sort: r => r.pb.po ?? "" },
+    { key: "o", label: "Ordered", render: r => <span style={{ whiteSpace: "nowrap" }}>{r.pb.orderedAt ?? "Not ordered"}</span>, sort: r => whenKey(r.pb.orderedAt) },
+    { key: "e", label: "ETA", render: r => <span style={{ whiteSpace: "nowrap", fontWeight: r.pb.received ? 400 : 600 }} className={r.pb.received ? "d-muted" : undefined}>{r.pb.eta}</span>, sort: r => whenKey(r.pb.eta) },
+    { key: "w", label: "Responsible", render: r => <span style={{ whiteSpace: "nowrap" }} title={pname(r.pb.owner)}>{pname(r.pb.owner).split(" ")[0]}</span>, sort: r => pname(r.pb.owner) },
+    { key: "i", label: "Customer impact", render: r => <span style={{ minWidth: 130, display: "inline-block" }}>{r.pb.impact ?? "None recorded"}</span> },
+    { key: "st", label: "Status", render: r => <div className="d-grid" style={{ gap: 6, justifyItems: "start" }}><StatusChip r={r} />{!r.pb.received && <Btn sm onClick={() => A.receivePart(r.j.id)}>Mark received</Btn>}</div>, sort: r => r.group },
+  ];
+
   return (
     <Page>
-      <Head title="Parts & Blockers" sub="Parts holding up live work, with an owner and the effect on delivery. Not a purchasing system." />
-      <div className="d-grid d-g3" style={{ marginBottom: 14 }}>
-        <Metric label="Jobs blocked by parts" value={d.awaitingParts.length} tone={d.awaitingParts.length ? "warn" : undefined} />
-        <Metric label="Blocking a handover" value={blockers.filter(j => !j.partBlocker!.received && s.gates[j.vehicle]).length} hint="V008 waiting on the rear caliper" />
-        <Metric label="Reserved for live jobs" value={reserved.length} />
-      </div>
-      <Card className="flush" title={undefined}>
-        <div style={{ padding: "14px 16px 4px" }}><b>Blockers</b></div>
-        <Table rowKey={j => j.id} rows={blockers} cols={[
-          { key: "p", label: "Part", render: j => j.partBlocker!.part, sort: j => j.partBlocker!.part },
-          { key: "j", label: "Job", render: j => <JLink id={j.id} /> },
-          { key: "v", label: "Vehicle", render: j => <VLink id={j.vehicle} /> },
-          { key: "s", label: "Source", render: j => j.partBlocker!.supplier },
-          { key: "o", label: "Owner", render: j => pname(j.partBlocker!.owner) },
-          { key: "e", label: "ETA", render: j => j.partBlocker!.received ? <Chip tone="ok">Received</Chip> : j.partBlocker!.eta, sort: j => j.partBlocker!.eta },
-          { key: "f", label: "Effect", render: j => j.vehicle === "V008" ? "Blocks V008 repair, retest and handover" : j.id === "JOB-1048" ? "Blocks C104 CVRT retest" : "Customer vehicle off road until fitted" },
-          { key: "a", label: "", render: j => !j.partBlocker!.received ? <Btn sm onClick={() => A.receivePart(j.id)}>Mark received</Btn> : <span className="d-muted">{j.status.replace("_", " ")}</span> },
-        ]} />
+      <Head title="Parts & Blockers" sub="Every part holding up work in the workshop or the yard, with an owner, a purchase order and the effect on the customer. Not a purchasing system.">
+        <KeyloopBadge label="PO data" />
+      </Head>
+
+      <Card className="w-insight-card">
+        <div className="w-insight">
+          <div>
+            <div className="d-eyebrow">Pulse insight</div>
+            <p className="w-insight-big">{open.length ? <>{numWord(open.length)} {open.length === 1 ? "job is" : "jobs are"} currently waiting for parts. Estimated lost workshop capacity today: {po.lostHours.toFixed(1)} hours.</> : "No jobs are waiting for parts. No workshop capacity is being lost today."}</p>
+            {open.length > 0 && <p className="d-muted" style={{ margin: "6px 0 0" }}>
+              {inYard.length} of them {inYard.length === 1 ? "stalls a vehicle" : "stall a vehicle"} in the yard ({inYard.map((r, i) => <span key={r.j.id}>{i ? ", " : ""}<VLink id={r.j.vehicle} /></span>)}).{" "}
+              {otherStalled.length} more {otherStalled.length === 1 ? "stops" : "stop"} work on a vehicle that is not waiting in the yard, and {continues.length} {continues.length === 1 ? "lets" : "let"} the technician carry on with other tasks.
+            </p>}
+          </div>
+          <div>
+            <div className="d-eyebrow" style={{ marginBottom: 6 }}>Capacity at risk by job (budget minutes still to run)</div>
+            <div className="w-lost">{lostRows.map(r => (
+              <div key={r.j.id} className="w-lost-r">
+                <JLink id={r.j.id} /><VLink id={r.j.vehicle} />
+                <span className="w-lost-bar"><i style={{ width: `${(r.lost / maxLost) * 100}%`, background: r.stalled ? "var(--bad)" : "var(--warn)" }} /></span>
+                <span className="d-mono">{r.lost} min</span>
+              </div>))}
+              <div className="w-lost-r tot"><b>Total</b><span /><span className="d-muted">{open.length} jobs</span><b className="d-mono">{lostRows.reduce((t, r) => t + r.lost, 0)} min</b></div>
+            </div>
+          </div>
+        </div>
       </Card>
+
+      <div className="d-grid" style={{ margin: "14px 0", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))" }}>
+        <Metric label="Jobs waiting for parts" value={open.length} tone={open.length ? "warn" : undefined} hint={justIn.length ? `${justIn.length} received in Pulse today` : "none received in Pulse yet"} />
+        <Metric label="Stalled in the yard" value={yc.parts.length} tone={yc.parts.length ? "bad" : undefined} hint="vehicles on site waiting for a part" />
+        <Metric label="Work stalled" value={po.stalled.length} tone={po.stalled.length ? "bad" : undefined} hint="technician cannot continue" />
+        <Metric label="Capacity at risk" value={`${po.lostHours.toFixed(1)} h`} tone={po.lostHours ? "warn" : undefined} hint="today, from budget still to run" />
+        <Metric label="Arriving today" value={today.length} hint={today.length ? `next ${today[0].pb.eta.replace("Today ", "")}` : "nothing due today"} />
+        <Metric label="Reserved for live jobs" value={RESERVED_PARTS.length} hint={`${RESERVED_PARTS.filter(r => r.status === "Issued").length} issued from stores`} />
+      </div>
+
+      <Card className="flush" title={undefined}>
+        <div className="w-sec-h"><b>Blockers</b><span className="d-muted">Stalled vehicles in the yard first, then longest wait</span></div>
+        <div className="w-ptable"><Table rowKey={r => r.j.id} rows={rows} cols={cols} /></div>
+        <div className="w-pcards">{rows.map(r => (
+          <div key={r.j.id} className={"w-pcard " + (r.pb.received ? "" : r.stalled ? "bad" : "warn")}>
+            <div className="d-row" style={{ gap: 8, justifyContent: "space-between" }}><b className="w-reg"><VLink id={r.j.vehicle} /></b><StatusChip r={r} /></div>
+            <div className="d-muted" style={{ marginTop: -4 }}>{cname(r.j.customer)}</div>
+            <div><b>{partName(r.pb.part)}</b> <span className="d-muted">for</span> <JLink id={r.j.id} /></div>
+            <dl className="w-pdl">
+              <dt>Supplier</dt><dd>{r.pb.supplier}</dd>
+              <dt>PO</dt><dd className="d-mono">{r.pb.po ?? "None"}</dd>
+              <dt>Ordered</dt><dd>{r.pb.orderedAt ?? "Not ordered"}</dd>
+              <dt>ETA</dt><dd><b>{r.pb.eta}</b></dd>
+              <dt>Responsible</dt><dd>{pname(r.pb.owner)}</dd>
+              <dt>Impact</dt><dd>{r.pb.impact ?? "None recorded"}</dd>
+            </dl>
+            {!r.pb.received && <div><Btn sm onClick={() => A.receivePart(r.j.id)}>Mark received</Btn></div>}
+          </div>))}</div>
+      </Card>
+
       <div style={{ height: 14 }} />
-      <Card className="flush"><div style={{ padding: "14px 16px 4px" }}><b>Reserved for jobs in progress</b></div>
-        <Table rowKey={r => r.part} rows={reserved} cols={[
-          { key: "p", label: "Part", render: r => r.part }, { key: "j", label: "Job", render: r => <JLink id={r.job} /> }, { key: "q", label: "Qty", num: true, render: r => r.qty },
-          { key: "s", label: "Source", render: r => r.supplier }, { key: "st", label: "Status", render: r => <Chip>{r.status}</Chip> },
+      <Card title={<>Arriving today <span className="d-muted">({today.length})</span></>}>
+        {today.length ? <div className="w-arr">{today.map(r => {
+          const mins = (etaClock(r.pb.eta) ?? s.clock) - s.clock;
+          return (
+            <div key={r.j.id} className={"w-arr-c " + (mins < 0 ? "late" : "")}>
+              <div className="d-row" style={{ gap: 8, justifyContent: "space-between" }}><span className="w-arr-t">{r.pb.eta.replace("Today ", "")}</span><Chip tone={mins < 0 ? "bad" : mins <= 60 ? "warn" : undefined}>{until(mins)}</Chip></div>
+              <b>{partName(r.pb.part)}</b>
+              <span className="d-muted">{r.pb.supplier} · <span className="d-mono">{r.pb.po}</span></span>
+              <span><VLink id={r.j.vehicle} /> <span className="d-muted">{cname(r.j.customer)}</span> · <JLink id={r.j.id} /></span>
+              <span className="d-muted">{pname(r.pb.owner)} receives it</span>
+              <div><Btn sm onClick={() => A.receivePart(r.j.id)}>Mark received</Btn></div>
+            </div>);
+        })}</div> : <Empty>No deliveries are due today.</Empty>}
+      </Card>
+
+      <div style={{ height: 14 }} />
+      <div className="d-grid d-g2">
+        <Card title="Suppliers">
+          <div className="d-list">{suppliers.map(sp => (
+            <div key={sp.name} className="d-li" style={{ alignItems: "flex-start" }}>
+              <div className="d-grow">
+                <b>{sp.name}</b>
+                <div className="d-muted" style={{ fontSize: 11.5 }}>{sp.mine.map(r => r.pb.po).join(", ")}{sp.raw.length > 1 ? ` · ${sp.raw.join(" and ")}` : ""}</div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="d-row" style={{ gap: 6, justifyContent: "flex-end" }}><Chip>{sp.mine.length} open</Chip>{sp.stalled > 0 && <Chip tone="bad">{sp.stalled} stalled</Chip>}</div>
+                <div className="d-muted" style={{ fontSize: 11.5, marginTop: 3 }}>Next ETA <b style={{ color: "var(--ink)", fontWeight: 600 }}>{sp.next.pb.eta}</b>{sp.back ? ` · ${sp.back} received recently` : ""}</div>
+              </div>
+            </div>))}
+            {!suppliers.length && <Empty>No open purchase orders.</Empty>}</div>
+        </Card>
+        <Card title="Received recently">
+          <div className="d-list">{received.map(x => (
+            <div key={x.po} className="d-li" style={{ alignItems: "flex-start" }}>
+              <div className="d-grow"><b>{x.part}</b><div className="d-muted" style={{ fontSize: 11.5 }}><span className="d-mono">{x.po}</span> · {x.supplier} · <VLink id={x.vehicle} /> · <JLink id={x.job} /></div></div>
+              <div style={{ textAlign: "right" }}><Chip tone="ok">Received</Chip><div className="d-muted" style={{ fontSize: 11.5, marginTop: 3 }}>{x.received} · {pname(x.owner)}</div></div>
+            </div>))}</div>
+        </Card>
+      </div>
+
+      <div style={{ height: 14 }} />
+      <Card className="flush"><div className="w-sec-h"><b>Reserved for jobs in progress</b><span className="d-muted">Issued from stores or held for a live job</span></div>
+        <Table rowKey={r => r.part} rows={RESERVED_PARTS} cols={[
+          { key: "p", label: "Part", render: r => r.part }, { key: "j", label: "Job", render: r => <JLink id={r.job} /> },
+          { key: "v", label: "Vehicle", render: r => { const j = s.jobs.find(x => x.id === r.job); return j ? <><VLink id={j.vehicle} /> <span className="d-muted">{cname(j.customer)}</span></> : "None"; } },
+          { key: "q", label: "Qty", num: true, render: r => r.qty },
+          { key: "s", label: "Source", render: r => r.supplier }, { key: "st", label: "Status", render: r => <Chip tone={r.status === "Issued" ? "ok" : undefined}>{r.status}</Chip> },
         ]} />
       </Card>
       <div style={{ marginTop: 10 }}><Note>Receiving a part only unblocks the repair. It never changes a CVRT result or releases a vehicle.</Note></div>
@@ -711,13 +1075,14 @@ export function Parts() {
   );
 }
 
+
 /* ═════════════════════════ BREAKDOWN ═════════════════════════ */
 export function Breakdown() {
   const [s] = useDerived();
   const calls = s.jobs.filter(j => j.complaint.startsWith("Breakdown"));
   const past = [
-    { at: "Fri 16 Oct 18:40", what: "Tyre blow-out, M6 near Moate — tyre fitted roadside", cust: "c-mayo", tech: "t-shane" },
-    { at: "Wed 14 Oct 07:15", what: "Non-start, customer depot — batteries replaced", cust: "c-shannon", tech: "t-robbie" },
+    { at: "Fri 16 Oct 18:40", what: "Tyre blow-out, M6 near Moate, tyre fitted roadside", cust: "c-mayo", tech: "t-shane" },
+    { at: "Wed 14 Oct 07:15", what: "Non-start, customer depot, batteries replaced", cust: "c-shannon", tech: "t-robbie" },
   ];
   return (
     <Page>

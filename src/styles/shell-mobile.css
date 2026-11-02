@@ -1,0 +1,26 @@
+/* Phone layout for the shell: the rail becomes an off-canvas menu, the top bar
+   gets a menu button, and Home stacks the widget rail under the ask box. */
+[data-shell-burger]{display:none}
+[data-shell-scrim]{display:none}
+@media (max-width:759px){
+  [data-shell-burger]{display:flex}
+  [data-shell-scrim][data-open="1"]{display:block;position:fixed;inset:0;z-index:80;background:var(--scrim)}
+  [data-shell-rail]{position:fixed !important;left:0;top:0;bottom:0;z-index:90;width:272px !important;align-items:stretch !important;padding:20px 16px 16px !important;background:var(--panel,var(--bg)) !important;border-right:1px solid var(--border);transform:translateX(-105%);transition:transform .3s var(--ease)}
+  [data-shell-rail][data-open="1"]{transform:none;box-shadow:0 0 70px rgba(0,0,0,.35)}
+  [data-shell-main]{margin:0 !important;border-radius:0 !important;border-left:0 !important;border-right:0 !important;border-bottom:0 !important;border-top:0 !important}
+  [data-shell-header]{display:flex !important;align-items:center;gap:8px;padding:10px 12px !important}
+  [data-shell-pill]{flex:1 1 0;min-width:0;margin:0 !important;width:auto !important}
+  [data-home]{padding:0 12px 14px !important;gap:12px !important}
+  [data-home][data-home-empty="1"]{flex-direction:column;overflow-y:auto;height:auto !important;flex:1;min-height:0}
+  [data-home][data-home-empty="1"] [data-home-chat]{flex:none !important;min-height:0}
+  [data-home][data-home-empty="1"] [data-home-chat] > div[style*="flex: 1 1 0"],[data-home][data-home-empty="1"] [data-home-chat] > div[style*="flex:1 1 0"]{display:none}
+  [data-home-rail]{width:100% !important;padding:0 0 10px !important;overflow:visible !important;flex:none !important}
+  [data-thread-clock]{display:none !important}
+  [data-thread-head]{flex-wrap:wrap;gap:10px !important;padding-bottom:12px !important}
+  [data-thread-head] > div:first-child{flex:1 1 100%}
+  [data-ans-head]{display:none !important}
+  [data-ans-row]{display:block !important;padding:8px 0}
+  [data-ans-row] > div{display:flex !important;gap:10px;padding:3px 14px !important}
+  [data-ans-row] > div::before{content:attr(data-label);flex:none;width:72px;font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);padding-top:2px}
+  [data-home] h1{font-size:30px !important}
+}

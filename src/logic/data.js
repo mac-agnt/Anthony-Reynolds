@@ -37,13 +37,17 @@ const ICONS = {
   navStock:"M14 17.5V6.5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10a1 1 0 0 0 1 1h1.5 M14.5 17.5h-5 M19.5 17.5H21a1 1 0 0 0 1-1v-3.6a1 1 0 0 0-.2-.6l-3.5-4.4A1 1 0 0 0 17.5 7.5H14 M19 17.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z M9 17.5a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z",
   navSales:"M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4Z M7.5 7.5h.01",
   navCvrt:"M9 3.5h6v3H9z M15 5h2a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2 M9 14l2 2 4-4",
-  navFinance:"M17.5 6.5A7 7 0 1 0 17.5 17.5 M4 10h10 M4 14h10"
+  navFinance:"M17.5 6.5A7 7 0 1 0 17.5 17.5 M4 10h10 M4 14h10",
+  navYard:"M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M9.5 17V7.5h3.6a2.9 2.9 0 0 1 0 5.8H9.5",
+  navComms:"M21 11.5a8.4 8.4 0 0 1-12.2 7.5L3.5 20.5l1.6-4.9A8.4 8.4 0 1 1 21 11.5Z M8.5 10.5h7 M8.5 13.5h4",
+  navInspect:"M8 3v3 M16 3v3 M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z M4 9.5h16 M9 15l2 2 4-4",
+  navPhone:"M8 3h8a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z M11 18h2"
 };
 
 /* Ontology stays first and is never removed (PulseLogic enforces this too). */
 const REC_SECTIONS = [
   {id:"ontology", label:"Ontology", blurb:"How every record connects: entities, predicates and the paths between them."},
-  {id:"files", label:"Files", blurb:"Documents, contracts and certificates — indexed where Helios can read them."},
+  {id:"files", label:"Files", blurb:"Documents, contracts and certificates — indexed where Pulse can read them."},
   {id:"contacts", label:"Contacts", blurb:"Every person the business deals with, staff and external."},
   {id:"companies", label:"Companies", blurb:"Customers and suppliers, with their vehicles, work and permitted commercial information."},
   {id:"vehicles", label:"Vehicles", blurb:"One canonical record per physical vehicle — dealership stock and customer-owned."}
@@ -56,8 +60,12 @@ const CONTACTS = [
   ["Caroline Glynn","Financial Controller","caroline@reynoldscommercials.ie","Reynolds Commercials","staff","#7fd8a4"],
   ["Elizabeth Reynolds","CVRT Manager","elizabeth@reynoldscommercials.ie","Reynolds Commercials","staff","#c8b4f0"],
   ["Jack Kelly","LCV Sales Executive","jack@reynoldscommercials.ie","Reynolds Commercials","staff","#e6c78a"],
-  ["Fergus Lally","Transport manager","accounts@example.com","Galway Haulage","customer","#9fd6f0"],
-  ["Noel Grehan","Fleet manager","fleet@example.com","Midlands Parcel Services","watch","#e2a08c"],
+  ["Declan Flynn","Owner","declan@example.com","Flynn Road Freight","customer","#9fd6f0"],
+  ["Siobhán Kelly","Fleet manager","fleet@example.com","Kelly Logistics","customer","#a8e0c0"],
+  ["Tom Murphy","Transport manager","tom@example.com","Murphy Transport","on stop","#e2a08c"],
+  ["Mark Doyle","Operations manager","mark@example.com","Doyle Transport","customer","#b8c8f0"],
+  ["Fergus Lally","Transport manager","transport@example.com","Galway Haulage","customer","#9fd6f0"],
+  ["Alan Finnerty","Accounts","accounts@example.com","Corrib Plant Hire","on stop","#e2a08c"],
   ["Mags Donlon","Owner","mags@example.com","Westway Electrical","customer","#a8e0c0"]
 ];
 
@@ -108,28 +116,33 @@ const FILE_TREE = [
 ];
 
 const ONTO_NODES = [
-  ["Vehicle","entity",500,300,1,"One canonical record per physical vehicle — dealership stock or customer-owned. Answers “what's the story with this vehicle?”"],
-  ["Company","entity",300,190,1,"Customers and suppliers. Customer names are fictional demo companies."],
-  ["Job","entity",700,190,1,"Workshop jobs: complaint, approved budget, status and the technician assigned."],
-  ["Quote","entity",250,430,1,"Deal workings and versions. Discount approvals bind to the version reviewed."],
-  ["CVRT booking","entity",690,430,1,"Test bookings and results. Outcomes are recorded and reviewed by people, never by an agent."],
-  ["Technician","entity",850,320,0,"People who clock time to jobs. Attendance is a separate source (Bizimply sample)."],
-  ["Handover","entity",390,95,0,"Independent release gates: parts, repair, test, documents and accounts clearance."],
-  ["Document","entity",620,95,0,"Spec sheets, job cards and quote packs — VIN-specific kept distinct from generic model sheets."],
-  ["Time entry","ledger",860,470,0,"Clock-on/off intervals from the sample AssetMinder export. Raw events are never changed."],
-  ["Invoice snapshot","ledger",140,300,0,"Invoice-ready values and imported balances. Read only — nothing is posted from Pulse."],
-  ["owned by","predicate",395,240,0,"Vehicle → Company."],
-  ["worked on in","predicate",605,240,0,"Vehicle → Job → Technician / Time entry."],
-  ["quoted on","predicate",360,370,0,"Vehicle → Quote → Approval / Handover."],
-  ["tested in","predicate",600,370,0,"Vehicle → CVRT booking → Result → Repair job."],
-  ["billed as","predicate",140,372,0,"Job → Invoice snapshot."]
+  ["Vehicle","entity",500,300,1,"One canonical record per physical vehicle, in the yard or in stock. Answers \u201cwhat's the story with this vehicle?\u201d"],
+  ["Customer","entity",300,190,1,"Operators and fleets Reynolds works for. Linked to every vehicle, job, message and invoice they own."],
+  ["Job","entity",700,190,1,"Keyloop workshop jobs: complaint, time budget, status, the technician and any part holding them up."],
+  ["Part","entity",250,430,1,"Parts a job needs, with the purchase order, supplier, ETA and the person responsible."],
+  ["CVRT test","entity",690,430,1,"Test bookings and results. Outcomes are recorded and reviewed by people, never by an agent."],
+  ["Technician","entity",850,320,0,"People who clock time to jobs. Attendance is a separate source."],
+  ["Purchase order","entity",390,95,0,"Orders raised in Keyloop for parts: who ordered, when, and the supplier ETA."],
+  ["Supplier","entity",620,95,0,"Renault Parts, Renault Genuine Parts and other suppliers, with their delivery history."],
+  ["Communication","entity",860,470,0,"WhatsApp, email, phone and Renault notices, matched to a vehicle, customer, job and part."],
+  ["Invoice","ledger",140,300,0,"Invoice-ready values and imported balances from Keyloop. Read only, nothing is posted from Pulse."],
+  ["Document","ledger",140,430,0,"Job cards, test sheets, Renault notices and spec sheets attached to the record they belong to."],
+  ["Keyloop","module",500,470,0,"System of record for customers, vehicles, jobs, parts and invoices. Pulse reads it and writes status back."],
+  ["WhatsApp","module",500,130,0,"Parts, workshop and yard groups plus customer threads. Pulse reads messages and files them."],
+  ["ANPR","module",300,330,0,"Gate cameras reading registrations on arrival and departure. Feeds the yard."],
+  ["owned by","predicate",395,240,0,"Vehicle \u2192 Customer."],
+  ["worked on in","predicate",605,240,0,"Vehicle \u2192 Job \u2192 Technician."],
+  ["waiting for","predicate",360,370,0,"Job \u2192 Part \u2192 Purchase order \u2192 Supplier."],
+  ["tested in","predicate",600,370,0,"Vehicle \u2192 CVRT test \u2192 Result \u2192 Repair job."],
+  ["billed as","predicate",140,372,0,"Job \u2192 Invoice."],
+  ["mentioned in","predicate",680,300,0,"Vehicle \u2192 Communication \u2192 Job, Part, Employee."]
 ];
 
 const ONTO_EDGES = [
   [500,300,300,190],[500,300,700,190],[500,300,250,430],[500,300,690,430],
-  [500,300,390,95],[500,300,620,95],[700,190,850,320],[850,320,860,470],
-  [690,430,700,190],[300,190,250,430],[620,95,700,190],[250,430,390,95],
-  [700,190,140,300],[390,95,620,95]
+  [700,190,850,320],[250,430,390,95],[390,95,620,95],[700,190,250,430],
+  [690,430,700,190],[300,190,500,300],[700,190,140,300],[140,300,140,430],
+  [500,300,860,470],[500,300,500,470],[500,300,500,130],[500,300,300,330]
 ];
 
 const REC_TEMPLATES = [
@@ -168,7 +181,7 @@ const PEOPLE = [
   ["Caroline Glynn","Financial Controller","caroline@reynoldscommercials.ie","Athlone","active","Manager","34 min ago"],
   ["Darren O'Brien","Parts Manager","darren@reynoldscommercials.ie","Athlone","active","Manager","1 h ago"],
   ["Jack Kelly","LCV Sales Executive","jack@reynoldscommercials.ie","Athlone","active","Standard","3 h ago"],
-  ["Billy Elliott","HGV technician","billy@example.com","Athlone","active","Standard","Clocked 08:15"]
+  ["Billy Murphy","HGV technician","billy@example.com","Athlone","active","Standard","Clocked 08:15"]
 ];
 const ROLE_LEVELS = ["Admin","Manager","Standard","External"];
 const PERM_KEYS = [["view","View records"],["edit","Edit records"],["approve","Approve payments"]];
@@ -186,9 +199,9 @@ const ROLE_SCOPES = ["All records","Their location","Assigned only"];
 const DEFAULT_PERMS = {Admin:{view:true,edit:true,approve:true}, Manager:{view:true,edit:true,approve:true},
   Standard:{view:true,edit:true,approve:false}, External:{view:true,edit:false,approve:false}};
 const INTEGRATIONS = [
-  {name:"Keyloop", blurb:"The intended future workshop and accounting core. Planned for the start of December 2026. Product, modules, consent and partner access are all to confirm.", tint:"#2034AB", status:"planned", statusKind:"off",
+  {name:"Keyloop", blurb:"System of record for customers, vehicles, jobs, parts and invoices. Pulse sits on top: it reads Keyloop and writes status changes back. Demo representation of the intended integration; endpoint availability depends on the APIs Reynolds is licensed for.", tint:"#2034AB", status:"connected", statusKind:"ok",
    glyph:"M6 10V8a6 6 0 0 1 12 0v2 M5 10h14v9H5v-9Z M12 13v3",
-   lastSync:"Planned — December 2026", usage:"Sample mappings only", auth:"Partner review", scopes:[]},
+   lastSync:"2 mins ago", usage:"14,284 records synced today", auth:"Partner API", scopes:["Read","Write status"]},
   {name:"AssetMinder", blurb:"Current workshop source. Sample export only in the demo — which reports and identifiers remain available during migration is still open.", tint:"#6ad0f0", status:"read only", statusKind:"warn",
    glyph:"M4 7.2a1.8 1.8 0 0 1 1.8-1.8h3l1.8 2.2h5.6A1.8 1.8 0 0 1 19 9.4v7.4H5V7.2Z",
    lastSync:"Sample export", usage:"Jobs, clocking, job cards", auth:"Access to confirm", scopes:["Read"]},
@@ -343,16 +356,16 @@ const ADMIN_CARDS = [
 
   {id:"integrations", group:"SYSTEMS", title:"Integrations", icon:"plug", tint:"#6ad0f0",
    blurb:"Email, accounting, CRM and messaging — and which way data flows.",
-   tags:["6 connected","1 disconnected","2 read-only"], badge:"Keyloop planned", badgeKind:"warn",
+   tags:["Keyloop connected","3 read-only","1 not connected"], badge:"Keyloop synced 2 mins ago", badgeKind:"ok",
    footer:"SharePoint not connected · access to confirm", action:"Reconnect",
    listLabel:"CONNECTIONS",
-   rows:[["AssetMinder","read and write"],["Keyloop","disconnected"],["Sage","read only"],["Bizimply","read and write"],
-     ["Renault order book","write only"],["Renault portal","write only"],["SharePoint","not connected"]]},
+   rows:[["Keyloop","two-way sync"],["AssetMinder","read only"],["Sage","read only"],["Bizimply","read only"],["WhatsApp","read"],["ANPR gate cameras","read"],
+     ["Renault order book","read"],["Renault notices","read"],["SharePoint","not connected"]]},
   {id:"modules", group:"SYSTEMS", title:"Modules & configuration", icon:"modules", tint:"#f0c04b",
    blurb:"Turn modules on, and make Pulse speak the business's own words.",
    tags:["3 installed","1 available","2 renamed terms"],
    heroLabel:"TERMINOLOGY", heroAction:"Edit terminology",
-   heroText:"Organisation reads as Merchant, and Task reads as Job, everywhere in the interface — including what Helios says back to you.",
+   heroText:"Organisation reads as Merchant, and Task reads as Job, everywhere in the interface — including what Pulse says back to you.",
    listLabel:"WHAT YOU CONTROL HERE",
    rows:[["Enable or disable modules","3 installed"],["Rename business terminology","2 overridden"],
      ["Create custom fields","9 fields"],["Configure statuses","6 sets"],["Edit record types","7 types"],
@@ -421,41 +434,40 @@ const ADMIN_GROUPS = [
 
 /* ---- activity feeds ---- */
 const SRC_TINT = {AssetMinder:"#6ad0f0", Pulse:"var(--accent)", Sage:"#8fa6ff", Bizimply:"#5fe0a8",
-  Renault:"#f0994b", Agent:"var(--accent)"};
-const SRC_ABBR = {AssetMinder:"AM", Pulse:"PL", Sage:"SG", Bizimply:"BZ", Renault:"RN", Agent:"AI"};
+  Renault:"#f0994b", Agent:"var(--accent)", ANPR:"#e0b452", Keyloop:"#2034AB"};
+const SRC_ABBR = {AssetMinder:"AM", Pulse:"PL", Sage:"SG", Bizimply:"BZ", Renault:"RN", Agent:"AI", ANPR:"AN", Keyloop:"KL"};
 
 const DATA_EVENTS = [
-  ["Sample order book imported","Latest Renault file flagged V019 missing from the latest file — queued for reconciliation, not marked sold.","Sample Renault order book","V019","Renault","completed"],
-  ["Job card loaded","Sample inspection sheet loaded against JOB-1041 for estimate review.","Sample AssetMinder export","JOB-1041","AssetMinder","completed"],
-  ["Spec sheet attached","Illustrative Renault specification matched to V024 by demo VIN.","Sample Renault portal","V024","Renault","completed"],
+  ["ANPR matched 241-D-1821","Gate 1 read the plate at 99%, matched it to Kelly Logistics and the Keyloop booking JOB-1084. Added to the yard.","Gate 1 camera","241-D-1821","ANPR","completed"],
+  ["ANPR could not match a plate","Read 192-D-3417 at 84% confidence. No vehicle or customer matched. Held at the gate for review.","Gate 1 camera","Unknown vehicle","ANPR","awaiting"],
+  ["WhatsApp attached to 181-G-4471","Darren: ECU ordered from Poland, should be here Thursday. Filed against JOB-1042 and PO-8821.","Parts group","181-G-4471","Renault","completed"],
+  ["Email attached to 231-D-8812","Murphy Transport says payment was sent and asks for release. Not yet visible in Keyloop.","accounts@","231-D-8812","Sage","completed"],
+  ["Renault notice received","13-week inspection due 18 November for 191-D-2811 (Doyle Transport).","Renault Trucks Ireland","191-D-2811","Renault","completed"],
+  ["Keyloop synced","14,284 records synced today. Customers, vehicles, jobs, parts and invoices are up to date.","Keyloop","Keyloop","Pulse","completed"],
   ["Clocking imported","Friday's clocking export loaded: 120.0 paid hours across 15 technicians.","Sample AssetMinder export","15 technicians","AssetMinder","completed"],
-  ["Invoice snapshot read","Receivables snapshot shows €18,000 outstanding, €10,800 overdue.","Sample Sage snapshot","Finance","Sage","completed"],
-  ["Attendance read","Two technicians present and unallocated since this morning.","Sample Bizimply report","Workshop","Bizimply","completed"],
-  ["Quote created","Q-1042 drafted for V024 — €34,000 net, awaiting discount approval.","Jack Kelly","Westway Electrical","Pulse","completed"],
-  ["CVRT result recorded","V008 failed on rear brake imbalance — repair job JOB-1046 opened.","Elizabeth Reynolds","Midlands Parcel Services","Pulse","completed"],
-  ["Keyloop","Planned for December — not connected. No sync performed.","Keyloop","Planned","Pulse","failed"]
+  ["Attendance read","Two technicians present and unallocated since this morning.","Sample Bizimply report","Workshop","Bizimply","completed"]
 ];
 
 const PEOPLE_EVENTS = [
+  ["Darren ordered a part","PO-8821 raised with Renault Parts for the 181-G-4471 ECU, ETA Thursday 22 Oct 10:00.","Darren O'Brien","181-G-4471","Pulse","completed"],
+  ["Elizabeth recorded a CVRT fail","T-303 on 222-G-1984 failed on a rear brake imbalance. Repair JOB-1046 linked.","Elizabeth Reynolds","Kelly Logistics","Pulse","completed"],
   ["Jonathan reviewed a labour gap","Friday's 13.0 unallocated hours opened for review.","Jonathan Keenan","Workshop","Pulse","completed"],
-  ["Anthony captured a request","Flag ETA changes against promised delivery dates, linked to V019.","Anthony Reynolds","V019","Pulse","completed"],
-  ["Conor confirmed job work","JOB-1041 — oil + filter and front pad inspection confirmed.","Conor Keane","Shannon Cold Chain","Pulse","completed"],
-  ["Darren chased a part","Rear caliper for V008 due 11:30.","Darren O'Brien","Midlands Parcel Services","Pulse","completed"],
+  ["Caroline placed an accounts hold","231-D-8812 held: INV-2062 is overdue, accounts approval required.","Caroline Glynn","Murphy Transport","Pulse","completed"],
+  ["Kevin sent a quote for approval","Tail-lift ram quoted at the customer. No reply yet from Boyle Agri Contracts.","Kevin Mannion","172-RN-505","Pulse","awaiting"],
   ["Jack prepared a quote pack","Q-1042 customer pack previewed with draft watermark.","Jack Kelly","Westway Electrical","Pulse","completed"],
-  ["Elizabeth scheduled a retest","C102 repaired, retest booked.","Elizabeth Reynolds","Mayo Logistics","Pulse","completed"],
-  ["Discount approval requested","Q-1042 €500 discount above the demo threshold — waiting on Anthony.","Jack Kelly","Westway Electrical","Pulse","awaiting"],
+  ["Discount approval requested","Q-1042 \u20ac500 discount above the demo threshold, waiting on Anthony.","Jack Kelly","Westway Electrical","Pulse","awaiting"],
   ["Write-up review requested","JOB-1041 draft needs service sign-off before invoicing.","Jonathan Keenan","Shannon Cold Chain","Pulse","awaiting"]
 ];
 
 const AI_EVENTS = [
-  ["Ops Watchdog flagged JOB-1042","Billy's job at 105 of 120 minutes — warning at 85% of budget.","Ops Watchdog","Galway Haulage","Agent","working"],
-  ["Job Card Assistant prepared JOB-1041 draft","Supported work only; two unconfirmed items raised as questions.","Job Card Assistant","Shannon Cold Chain","Agent","awaiting"],
-  ["Stock & Specification prepared an import diff","2 added, 3 ETA changes, V019 missing — no sale created.","Stock & Specification","V019","Agent","working"],
-  ["Briefing drafted the morning brief","Friday gap, Billy's job, write-ups and V008 — two need you.","Briefing","Anthony Reynolds","Agent","completed"],
-  ["Sales Assistant prefilled Q-1042","Discount flagged for approval; follow-up task created.","Sales Assistant","Westway Electrical","Agent","awaiting"],
-  ["Handover Coordinator checked V008","Repair, retest and accounts gates still open — handover blocked.","Handover Coordinator","Midlands Parcel Services","Agent","working"],
-  ["Finance Assistant summarised readiness","€2,110 invoice-ready; €1,730 blocked on write-up.","Finance Assistant","Finance","Agent","working"],
-  ["Ops Watchdog flagged two gaps","Two technicians present and unallocated this morning.","Ops Watchdog","Workshop","Agent","working"]
+  ["Communication Triage matched a message","\u201cECU for the Flynn truck should arrive Thursday\u201d is probably 181-G-4471 at 92%. Needs a person to confirm.","Communication Triage","Flynn Road Freight","Agent","awaiting"],
+  ["Operations Watchdog flagged JOB-1042","Billy's job at 105 of 120 minutes (87.5%), part blocker noted.","Operations Watchdog","181-G-4471","Agent","working"],
+  ["Parts Monitor checked supplier ETAs","Seven jobs are waiting for parts. Caliper PO-8817 is due 11:30, alternator PO-8822 at 14:00.","Parts Monitor","Parts","Agent","working"],
+  ["Yard Monitor held 231-D-8812","Accounts hold: INV-2062 outstanding. Release needs Caroline's approval.","Yard Monitor","Murphy Transport","Agent","awaiting"],
+  ["Inspection Coordinator drafted a reminder","WhatsApp reminder for 191-D-2811 is ready for approval before it is sent.","Inspection Coordinator","Doyle Transport","Agent","awaiting"],
+  ["Handover Coordinator checked V008","Caliper, retest and accounts gates still open. Handover blocked.","Handover Coordinator","Kelly Logistics","Agent","working"],
+  ["Invoice Readiness summarised the day","Jobs ready to invoice and jobs held up by write-up review, with the accounts holds beside them.","Invoice Readiness","Finance","Agent","working"],
+  ["Operations Watchdog flagged two gaps","Two technicians present and unallocated this morning.","Operations Watchdog","Workshop","Agent","working"]
 ];
 
 const STREAM_DEFS = [
@@ -470,7 +482,10 @@ const STREAM_DEFS = [
 const NAV = [
   {label:"Home", icon:"helios", page:"Home"},
   {label:"Agents", icon:"navAgents", page:"Agents"},
+  {label:"Yard", icon:"navYard", page:"Yard", dot:true},
   {label:"Workshop", icon:"navWorkshop", page:"Workshop", dot:true},
+  {label:"Communications", icon:"navComms", page:"Comms", dot:true},
+  {label:"Inspections", icon:"navInspect", page:"Inspections"},
   {label:"Vehicle Stock", icon:"navStock", page:"Stock"},
   {label:"Sales", icon:"navSales", page:"Sales"},
   {label:"CVRT", icon:"navCvrt", page:"CVRT"},
@@ -478,80 +493,104 @@ const NAV = [
   {label:"Dashboard", icon:"navDash", page:"Dashboard"},
   {label:"Work", icon:"navWork", page:"Work"},
   {label:"Records", icon:"navRecords", page:"Records"},
-  {label:"Activity", icon:"pulseLine", page:"Activity", dot:true}
+  {label:"Activity", icon:"pulseLine", page:"Activity", dot:true},
+  {label:"MD mobile view", icon:"navPhone", page:"MD"}
 ];
 
-/* Inbox items follow the real InboxItem shape: what happened, why it matters, what I can do. */
+/* Inbox items follow the real InboxItem shape: what happened, why it matters, what I can do.
+   Every number here is a fallback: bridge.ts inboxOverrides() rewrites the live ones from the store. */
 const ITEMS = {
   v008:{kind:"Alert", importance:"critical", icon:ICONS.health, age:"40m",
-    title:"V008 handover blocked — failed CVRT",
-    why:"A reserved used van for Midlands Parcel Services failed its test. Repair, retest and accounts clearance are still open.",
-    detail:"CVRT failed on rear brake imbalance. Repair JOB-1046 is waiting on a rear caliper (sample ETA 11:30). A repair finishing does not pass the test — the retest is a separate, reviewed outcome. Each release gate has a named owner.",
-    actionLabel:"Open V008", secondaryLabel:"View gates", group:"Alerts", target:["Sales","handovers","vehicle","V008"],
-    fields:[{k:"Provider",v:"handover.gates"},{k:"Vehicle",v:"V008"},{k:"Repair",v:"JOB-1046"},{k:"Customer",v:"Midlands Parcel Services"}],
+    title:"V008 (222-G-1984) handover blocked, failed CVRT",
+    why:"Kelly Logistics' used Master failed its test. Caliper, retest and accounts clearance are still open.",
+    detail:"CVRT T-303 failed on a rear brake imbalance. Repair JOB-1046 is waiting on a rear caliper (PO-8817). A repair finishing does not pass the test: the retest is a separate, reviewed outcome. Each release gate has a named owner.",
+    actionLabel:"Open 222-G-1984", secondaryLabel:"View gates", group:"Alerts", target:["Vehicle","view","vehicle","V008"],
+    fields:[{k:"Provider",v:"handover.gates"},{k:"Vehicle",v:"222-G-1984"},{k:"Repair",v:"JOB-1046"},{k:"Customer",v:"Kelly Logistics"}],
     history:[{when:"Today 09:30",text:"CVRT recorded a fail"},{when:"Today 09:35",text:"Repair JOB-1046 opened, part on order"}]},
+  murphy:{kind:"Alert", importance:"critical", icon:ICONS.navFinance, age:"1h",
+    title:"231-D-8812 on accounts hold, customer says payment sent",
+    why:"Murphy Transport has an overdue balance. Tom Murphy emailed to say it was paid and asks for release at 16:00.",
+    detail:"Release is blocked until accounts approve. The payment is not yet visible in Keyloop. Pulse cannot mark a payment received.",
+    actionLabel:"Open 231-D-8812", secondaryLabel:"Open Finance", group:"Alerts", target:["Vehicle","view","vehicle","C139"],
+    fields:[{k:"Provider",v:"finance.holds"},{k:"Vehicle",v:"231-D-8812"},{k:"Invoice",v:"INV-2062"},{k:"Customer",v:"Murphy Transport"}],
+    history:[{when:"Today 08:50",text:"Accounts hold in place"},{when:"Today 09:34",text:"Tom Murphy emailed: payment sent"}]},
+  ecu:{kind:"Task", importance:"high", icon:ICONS.navComms, age:"23m",
+    title:"ECU message needs review: probably 181-G-4471",
+    why:"\u201cECU for the Flynn truck should arrive Thursday.\u201d Pulse is 92% sure which vehicle this is and wants a person to confirm.",
+    detail:"Flynn Road Freight has three vehicles on site, and only 181-G-4471 has an ECU on order (PO-8821). Confirming attaches the message to the vehicle timeline and JOB-1042.",
+    actionLabel:"Review message", secondaryLabel:"Open 181-G-4471", group:"Work", target:["Comms","inbox"],
+    fields:[{k:"Provider",v:"comms.triage"},{k:"Source",v:"WhatsApp, Parts group"},{k:"Suggested",v:"181-G-4471"},{k:"Confidence",v:"92%"}],
+    history:[{when:"Today 09:37",text:"Message received in the Parts group"},{when:"Today 09:37",text:"Communication Triage suggested a match"}]},
+  unknown:{kind:"Alert", importance:"high", icon:ICONS.navYard, age:"9m",
+    title:"Unknown vehicle at the gate, plate read at 84%",
+    why:"ANPR read 192-D-3417 but could not match it to a vehicle or customer. It is held in the gate holding bay.",
+    detail:"The closest known vehicle is 192-D-3411 (Murphy Transport). Review the read, match it to a vehicle, or create a new vehicle record.",
+    actionLabel:"Review at the gate", secondaryLabel:"Match vehicle", group:"Alerts", target:["Yard","anpr","focus","U001"],
+    fields:[{k:"Provider",v:"yard.anpr"},{k:"Read",v:"192-D-3417"},{k:"Confidence",v:"84%"},{k:"Closest",v:"192-D-3411"}],
+    history:[{when:"Today 09:51",text:"Gate 1 camera read the plate"},{when:"Today 09:51",text:"No vehicle match, held for review"}]},
+  doyle:{kind:"Task", importance:"high", icon:ICONS.navInspect, age:"38m",
+    title:"Renault notice: 191-D-2811 inspection due 18 November",
+    why:"Doyle Transport's 13-week inspection. Pulse has found the customer and contact, and drafted a WhatsApp reminder for you to approve.",
+    detail:"Customer identified, contact details found, previous channel was WhatsApp. Nothing is sent until you approve it.",
+    actionLabel:"Review reminder", secondaryLabel:"Open 191-D-2811", group:"Work", target:["Inspections","notices","focus","C150"],
+    fields:[{k:"Provider",v:"inspections.notices"},{k:"Vehicle",v:"191-D-2811"},{k:"Customer",v:"Doyle Transport"},{k:"Due",v:"18 Nov"}],
+    history:[{when:"Today 09:22",text:"Renault notice received"},{when:"Today 09:23",text:"Customer and contact found, reminder drafted"}]},
   gaps:{kind:"Alert", importance:"high", icon:ICONS.autos, age:"35m",
     title:"Two technicians present but unallocated",
     why:"Seán Doyle has had no job clocking since 09:25, Rachel Byrne since 09:42. Both are present, neither is on an approved break.",
     detail:"The live board surfaces this while the day is still recoverable. Reviewing opens the underlying clock evidence and a reason editor; it does not change the raw clocking.",
     actionLabel:"Open Live Board", secondaryLabel:"Record a reason", group:"Alerts", target:["Workshop","live"],
-    fields:[{k:"Provider",v:"workshop.liveboard"},{k:"Seán Doyle",v:"idle 35 min"},{k:"Rachel Byrne",v:"idle 18 min"},{k:"Source",v:"Sample AssetMinder export"}],
+    fields:[{k:"Provider",v:"workshop.liveboard"},{k:"Seán Doyle",v:"idle 35 min"},{k:"Rachel Byrne",v:"idle 18 min"},{k:"Source",v:"Keyloop clocking"}],
     history:[{when:"Today 09:25",text:"Seán clocked off his last job"},{when:"Today 09:42",text:"Rachel clocked off her last job"}]},
   billy:{kind:"Alert", importance:"high", icon:ICONS.work, age:"10m",
     title:"Billy's JOB-1042 at 105 of 120 minutes",
-    why:"Galway Haulage brake investigation is at 87.5% of its approved time budget. Warning fires at 85% consumed.",
-    detail:"This is elapsed time against budget, not physical completion. Next up is JOB-1043 for Mayo Logistics at 10:15. You can review the budget or move the next job, with a reason.",
+    why:"181-G-4471 (Flynn Road Freight) is at 87.5% of its time budget and the ECU is still on order (PO-8821). Warning fires at 85%.",
+    detail:"This is elapsed time against budget, not physical completion. Billy has done all the work possible without the part. Next up is JOB-1043 for Mayo Logistics at 10:15.",
     actionLabel:"Open Live Board", secondaryLabel:"Move next job", group:"Alerts", target:["Workshop","live"],
-    fields:[{k:"Provider",v:"workshop.watchdog"},{k:"Job",v:"JOB-1042"},{k:"Consumed",v:"105 / 120 min"},{k:"Next",v:"JOB-1043 · 10:15"}],
-    history:[{when:"Today 08:15",text:"Billy clocked on"},{when:"Today 10:00",text:"Ops Watchdog flagged 85% of budget"}]},
+    fields:[{k:"Provider",v:"workshop.watchdog"},{k:"Job",v:"JOB-1042"},{k:"Consumed",v:"105 / 120 min"},{k:"Part",v:"ECU \u00b7 PO-8821"}],
+    history:[{when:"Today 08:15",text:"Billy clocked on"},{when:"Today 10:00",text:"Operations Watchdog flagged 85% of budget"}]},
   writeups:{kind:"Task", importance:"high", icon:ICONS.approvals, age:"2h",
     title:"3 completed jobs await write-up review",
-    why:"€1,730 net is ready to invoice once the technician confirms the work and the service manager approves.",
-    detail:"JOB-1041 (€780) is the one to start on — oil and filter plus a front-pad inspection are supported by the notes; pads and wipers are not. Unconfirmed items are shown as questions, not customer narrative.",
+    why:"Net value is ready to invoice once the technician confirms the work and the service manager approves.",
+    detail:"Unconfirmed items are shown as questions, not customer narrative.",
     actionLabel:"Open Job Cards", secondaryLabel:"Open Approvals", group:"Work", target:["Workshop","jobcards"],
-    fields:[{k:"Provider",v:"workshop.jobcards"},{k:"Blocked",v:"€1,730 · 3 jobs"},{k:"Ready",v:"€2,110 · 3 jobs"},{k:"Start with",v:"JOB-1041"}],
-    history:[{when:"Today 09:10",text:"Job Card Assistant prepared the JOB-1041 draft"},{when:"Today 09:12",text:"Flagged for technician confirmation"}]},
+    fields:[{k:"Provider",v:"workshop.jobcards"},{k:"Source",v:"Keyloop job cards"}],
+    history:[{when:"Today 09:10",text:"Job Card Assistant prepared a draft"},{when:"Today 09:12",text:"Flagged for technician confirmation"}]},
   discount:{kind:"Approval", importance:"high", icon:ICONS.approvals, age:"1h",
-    title:"Q-1042 — €500 discount needs your approval",
-    why:"Raised by Jack Kelly for Westway Electrical. The €500 discount is above the €250 demo threshold, so it routed to you.",
-    detail:"Quote is €34,000 net on V024. Missing approved specification and this pending discount both stop it reaching Ready for customer. The customer pack previews with a draft watermark until then.",
+    title:"Q-1042: \u20ac500 discount needs your approval",
+    why:"Raised by Jack Kelly for Westway Electrical. The \u20ac500 discount is above the \u20ac250 demo threshold, so it routed to you.",
+    detail:"Quote is \u20ac34,000 net on V024. Missing approved specification and this pending discount both stop it reaching Ready for customer. The customer pack previews with a draft watermark until then.",
     actionLabel:"Review Q-1042", secondaryLabel:"Request changes", group:"Approvals", target:["Sales","quote"],
-    fields:[{k:"Provider",v:"sales.approvals"},{k:"Requested by",v:"Jack Kelly"},{k:"Quote",v:"Q-1042 · €34,000"},{k:"Discount",v:"€500"}],
-    history:[{when:"Today 08:50",text:"Jack Kelly raised the quote"},{when:"Today 08:50",text:"Routed to Anthony Reynolds — over threshold"}]}
-};
-ITEMS.cvrtok = {kind:"Update", importance:"normal", icon:ICONS.navCvrt, age:"1h",
+    fields:[{k:"Provider",v:"sales.approvals"},{k:"Requested by",v:"Jack Kelly"},{k:"Quote",v:"Q-1042 \u00b7 \u20ac34,000"},{k:"Discount",v:"\u20ac500"}],
+    history:[{when:"Today 08:50",text:"Jack Kelly raised the quote"},{when:"Today 08:50",text:"Routed to Anthony Reynolds, over threshold"}]},
+  cvrtok:{kind:"Update", importance:"normal", icon:ICONS.navCvrt, age:"1h",
     title:"Two CVRT tests passed this morning",
-    why:"Galway Haulage and Shannon Cold Chain vehicles passed first time.",
-    detail:"Results were recorded and reviewed by the CVRT team. Ten bookings remain today, including the Mayo Logistics retest at 11:00.",
+    why:"Both vehicles passed first time.",
+    detail:"Results were recorded and reviewed by the CVRT team.",
     actionLabel:"Open CVRT", secondaryLabel:"Results", group:"Work", target:["CVRT","overview"],
-    fields:[{k:"Provider",v:"cvrt.results"},{k:"Passed",v:"T-301, T-302"},{k:"Remaining",v:"10 bookings"},{k:"Source",v:"Recorded by people"}],
-    history:[{when:"Today 08:30",text:"T-301 passed"},{when:"Today 09:00",text:"T-302 passed"}]};
-const ORDER = ["v008","gaps","billy","writeups","discount","cvrtok"];
+    fields:[{k:"Provider",v:"cvrt.results"},{k:"Passed",v:"T-301, T-302"},{k:"Source",v:"Recorded by people"}],
+    history:[{when:"Today 08:30",text:"T-301 passed"},{when:"Today 09:00",text:"T-302 passed"}]}
+};
+const ORDER = ["v008","murphy","ecu","unknown","doyle","billy","gaps","writeups","discount","cvrtok"];
 
+/* The nine questions Anthony asked for. Tags show on the Home ask box. */
+const PROMPTS = [
+  ["What's the story with 181-G-4471?","VEHICLE"],
+  ["What vehicles are waiting for parts?","PARTS"],
+  ["Why is V008 still here?","VEHICLE"],
+  ["Which technicians have spare capacity?","WORKSHOP"],
+  ["What vehicles should leave tomorrow?","YARD"],
+  ["Which customers haven't replied about inspections?","INSPECTIONS"],
+  ["Show every vehicle currently on accounts hold.","FINANCE"],
+  ["What is stopping vehicles from leaving the yard?","YARD"],
+  ["Give me tomorrow morning's workshop risks.","WORKSHOP"]
+];
+
+/* Only reached when bridge.ts liveAnswer() has no answer for the question. */
 const ANSWERS = {
-  workshop:{tool:"workshop_clocking", effect:"read",
-    text:"Friday had 13.0 unallocated workshop hours — a €1,040 billing equivalent at the demo €80/hour rate, not confirmed lost revenue. Today two technicians are present but unallocated (Seán since 09:25, Rachel since 09:42), and Billy's Galway Haulage job has used 105 of 120 minutes.",
-    cols:["Bucket","Hours","Share"],
-    rows:[["Job-allocated","94.0","78%"],["Approved breaks","7.5","6%"],["Internal work","5.5","5%"],["Unallocated — review","13.0","11%"]],
-    actions:[["Open Workshop → Clocking",1,["Workshop","clocking"]],["Open the live gaps",0,["Workshop","live"]]]},
-  v008:{tool:"vehicle_timeline", effect:"read",
-    text:"V008 is a reserved used Master van for Midlands Parcel Services. Its CVRT failed on rear brake imbalance, so repair JOB-1046 is open and waiting on a rear caliper with a sample ETA of 11:30. Handover is blocked: the repair, the retest and accounts clearance are each separate gates. A repair finishing does not pass the test.",
-    cols:["Gate","Owner","State"],
-    rows:[["Parts (caliper)","Darren O'Brien","ETA 11:30"],["Repair readiness","Jonathan Keenan","blocked"],["Retest","Elizabeth Reynolds","after repair"],["Accounts clearance","Caroline Glynn","pending"]],
-    actions:[["Open V008 record",1,["Sales","handovers","vehicle","V008"]],["Open the repair handover",0,["CVRT","repairs"]]]},
-  meeting:{tool:"morning_meeting", effect:"read",
-    text:"Today's meeting reads the same records as the rest of Pulse. Five sections are enabled: Greeting, Events, Readiness, Preview and Photos. Billy's current Galway Haulage job and next Mayo Logistics job come straight from the planner — nothing retyped. Today's absence and the breakdown rota are included.",
-    cols:["Section","State"],
-    rows:[["Greeting","enabled"],["Events","enabled"],["Readiness","enabled · 3 columns"],["Preview","enabled · 15 technicians"],["Photos","enabled"]],
-    actions:[["Open the morning meeting",1,["Work","meeting"]],["Open the planner",0,["Workshop","planner"]]]},
-  quote:{tool:"quote_builder", effect:"read",
-    text:"V024 is an incoming Renault Master chassis cab due 20 October with no approved specification sheet yet. Q-1042 for Westway Electrical totals €34,000 net: €32,500 vehicle + €1,250 options + €750 delivery, less a €500 discount. Two gates are open — the €500 discount needs your approval (demo policy above €250) and the specification needs attaching before it can reach Ready for customer.",
-    cols:["Line","Amount"],
-    rows:[["Vehicle","€32,500"],["Options","€1,250"],["Delivery / prep","€750"],["Discount","−€500"],["Net quote","€34,000"]],
-    actions:[["Open Q-1042",1,["Sales","quote"]],["Attach a sample spec to V024",0,["Stock","specs"]]]},
-  fallback:{tool:"pulse_search", effect:"read",
-    text:"This is a demo preview with sample responses. I answer from the seeded Reynolds records — workshop jobs, vehicle stock, sales, CVRT, parts and finance — and link to the exact record. Nothing is sent externally, and Keyloop is planned, not connected.",
-    actions:[["Show me today's priorities",1,["Dashboard","executive"]]]}
+  fallback:{tool:"pulse_search \u00b7 Keyloop + WhatsApp + ANPR", effect:"read",
+    text:"I answer from the live Reynolds records: the yard, workshop, parts, communications, inspections, CVRT and finance, combined from Keyloop, WhatsApp, email, ANPR and Renault notices. Type a registration, a customer or a job number, or ask one of the questions below. Nothing is sent externally.",
+    actions:[["What's the story with 181-G-4471?",1],["What is stopping vehicles from leaving the yard?",0],["Which customers haven't replied about inspections?",0]]}
 };
 
 // Turns a plain-English filter name into a full dashboard area — the "primitive
@@ -621,25 +660,24 @@ function synthesizeCustomArea(name){
 }
 
 function pickAnswer(q){
-  const s = q.toLowerCase();
-  if (/v008|handover|cvrt|test fail|midlands|story with v/.test(s)) return ANSWERS.v008;
-  if (/quote|v024|westway|deal|discount/.test(s)) return ANSWERS.quote;
-  if (/meeting|morning|presentation|brief/.test(s)) return ANSWERS.meeting;
-  if (/workshop|losing|time|gap|unallocated|labour|clock|billy|budget/.test(s)) return ANSWERS.workshop;
   return ANSWERS.fallback;
 }
 
 const ORGS = [
-  ["Corrib Plant Hire","Customer","€4,800","17 days","overdue"],
-  ["Boyle Agri Contracts","Customer","€3,600","10 days","overdue"],
-  ["Tuam Builders Providers","Customer","€2,400","3 days","watch"],
-  ["Galway Haulage","Customer","€7,200","due 30 Oct","active"],
-  ["Renault Trucks Ireland","Supplier","—","—","active"],
-  ["CV Parts Direct","Supplier","—","—","active"]
+  ["Murphy Transport","Customer","\u20ac4,820","14 days","overdue"],
+  ["Corrib Plant Hire","Customer","\u20ac4,800","17 days","overdue"],
+  ["Boyle Agri Contracts","Customer","\u20ac3,600","10 days","overdue"],
+  ["Tuam Builders Providers","Customer","\u20ac2,400","3 days","watch"],
+  ["Shannon Cold Chain","Customer","\u20ac7,200","due 30 Oct","active"],
+  ["Flynn Road Freight","Customer","\u2014","\u2014","active"],
+  ["Kelly Logistics","Customer","\u2014","\u2014","active"],
+  ["Doyle Transport","Customer","\u2014","\u2014","active"],
+  ["Renault Trucks Ireland","Supplier","\u2014","\u2014","active"],
+  ["Midland CV Factors","Supplier","\u2014","\u2014","active"]
 ];
 const TEAMS = [
   ["Workshop","15 members","Jonathan Keenan","job allocation, clocking"],
-  ["Parts","3 members","Darren O'Brien","parts, blockers"],
+  ["Parts","3 members","Darren O'Brien","parts, purchase orders, blockers"],
   ["Sales","3 members","Jack Kelly","quotes, handovers"],
   ["CVRT","2 members","Elizabeth Reynolds","test results, retests"],
   ["Accounts","3 members","Caroline Glynn","invoice readiness"],
@@ -660,16 +698,17 @@ const AGENT_DEFS = [
      {kind:"agent", text:"morning briefing:", lines:[
        {k:"Labour", v:"Friday had 13.0 unallocated hours · €1,040 equivalent (not confirmed lost revenue)"},
        {k:"Live", v:"two technicians unallocated · Billy at 105/120 minutes"},
-       {k:"Invoicing", v:"€3,840 completed · €1,730 blocked on write-up · V008 handover blocked"}]},
-     {kind:"agent", text:"two things need you today: the Q-1042 discount, and whether to move Billy's next job. everything else is covered."},
+       {k:"Yard", v:"42 vehicles on site · 7 need attention · 11 ready to leave"},
+       {k:"Invoicing", v:"€18,420 ready to invoice across 8 jobs · V008 (222-G-1984) cannot be released"}]},
+     {kind:"agent", text:"two things need you today: the Murphy Transport accounts hold on 231-D-8812, and the unknown vehicle at the gate. everything else is covered."},
      {kind:"user", text:"prepare the morning meeting"},
      {kind:"agent", text:"done — five sections enabled, Billy's current and next jobs pulled straight from the planner. nothing retyped. i've drafted it; it waits for you to present."}
    ]},
   {id:"watchdog", name:"Ops Watchdog", shape:"shield", tint:"#2b1b1e", state:"attention", role:"Flags unallocated technicians, approaching budgets, overdue blockers and stale source data",
-   when:"10:00", preview:"billy at 105/120 minutes. two technicians idle.",
+   when:"10:00", preview:"JOB-1042 at 105/120 minutes. two technicians idle.",
    thread:[
      {kind:"stamp", text:"Today 10:00"},
-     {kind:"agent", text:"JOB-1042 (Billy, Galway Haulage) is at 105 of 120 minutes — 87.5% of the approved budget. this is elapsed time against budget, not physical completion."},
+     {kind:"agent", text:"JOB-1042 (Billy, 181-G-4471 for Flynn Road Freight) is at 105 of 120 minutes, 87.5% of the approved budget. he has done all he can without the ECU (PO-8821, due Thursday 10:00). this is elapsed time against budget, not physical completion."},
      {kind:"agent", text:"also two technicians present and unallocated: Seán since 09:25, Rachel since 09:42. neither is on an approved break. breaks, leave and training are excluded from this."},
      {kind:"user", text:"what are the rules"},
      {kind:"agent", text:"configurable demo assumptions: gap over 15 minutes, warn at 85% of budget, over-budget above 100%. i won't treat stale data as proof anyone is idle."}
@@ -701,29 +740,34 @@ const AGENT_DEFS = [
      {kind:"agent", text:"i've prepared the customer pack — Dealsheet, manufacturer/new-customer sheet and a SIMI draft slot — from one deal record. it previews with a draft watermark while the spec and discount are open. i can't approve discounts or send anything."}
    ]},
   {id:"finance", name:"Finance Assistant", shape:"offset-pebble", tint:"#191c1f", state:"working", role:"Summarises invoice readiness and imported balances, drafts reminders and points to missing evidence",
-   when:"Today", preview:"€2,110 ready · €1,730 blocked · €10,800 overdue.",
+   when:"Today", preview:"€18,420 ready · two accounts holds · €10,800 overdue.",
    thread:[
      {kind:"stamp", text:"Today 09:30"},
-     {kind:"agent", text:"six completed jobs total €3,840 net. €2,110 is invoice-ready across 3 jobs; €1,730 is blocked on write-up across 3. receivables are €18,000 outstanding, €10,800 overdue across 3 invoices."},
+     {kind:"agent", text:"€18,420 is invoice-ready across 8 jobs in Keyloop. two vehicles are on accounts hold: 231-D-8812 (Murphy Transport, €4,820) and 192-G-1101 (Corrib Plant Hire, €4,800). receivables are €18,000 outstanding, €10,800 overdue."},
      {kind:"agent", text:"i never post an invoice, change a ledger or mark a payment received. invoice-ready is not invoiced revenue, and these are imported balances, not tax or net figures."}
    ]},
   {id:"handover", name:"Handover Coordinator", shape:"rim-capsule", tint:"#2b1b1e", state:"attention", role:"Combines sales, workshop, parts, test, document and accounts gates and explains the next owner",
    when:"09:35", preview:"V008 blocked: repair, retest, accounts.",
    thread:[
      {kind:"stamp", text:"Today 09:35"},
-     {kind:"agent", text:"V008 for Midlands Parcel Services can't leave. failed CVRT, open repair JOB-1046 waiting on a rear caliper (ETA 11:30), retest not done, accounts not cleared. each gate has an owner."},
+     {kind:"agent", text:"V008 (222-G-1984) for Kelly Logistics can't leave. failed CVRT T-303, open repair JOB-1046 waiting on a rear caliper (PO-8817, ETA 11:30), retest not done, accounts not cleared. each gate has an owner."},
      {kind:"agent", text:"a parts receipt can unblock the repair; a completed repair can enable retest scheduling. neither alone passes the test or releases the van. i can't certify roadworthiness or override a gate."}
    ]}
 ];
 
 const KPI_DEFS = {
-  allocation:{label:"Labour allocation", value:"83.6%", delta:"Friday", dir:"down", hint:"job time ÷ paid less breaks", hero:true},
-  unallocated:{label:"Unallocated — review", value:"13.0 h", delta:"€1,040 equiv", dir:"down", hint:"Friday · investigate"},
+  yardOnSite:{label:"Vehicles on site", value:"42", delta:"8 arrived today", dir:"up", hint:"16 overnight", hero:true},
+  yardReady:{label:"Ready to leave", value:"11", delta:"collection today", dir:"up", hint:"cleared by accounts"},
+  yardBlocked:{label:"Blocked vehicles", value:"7", delta:"need attention", dir:"down", hint:"parts, accounts, CVRT"},
+  waitingParts:{label:"Waiting for parts", value:"7", delta:"jobs", dir:"down", hint:"capacity lost today"},
+  utilisation:{label:"Utilisation", value:"83%", delta:"12 active", dir:"up", hint:"on a job right now"},
+  invoiceReady:{label:"Ready to invoice", value:"\u20ac18,420", delta:"8 jobs", dir:"up", hint:"completed, not invoiced"},
+  allocation:{label:"Labour allocation", value:"83.6%", delta:"Friday", dir:"down", hint:"job time \u00f7 paid less breaks"},
+  unallocated:{label:"Unallocated: review", value:"13.0 h", delta:"\u20ac1,040 equiv", dir:"down", hint:"Friday \u00b7 investigate"},
   openJobs:{label:"Open workshop jobs", value:"24", delta:"8 queued", dir:"up", hint:"live today"},
-  invoiceReady:{label:"Invoice-ready", value:"€2,110", delta:"3 jobs", dir:"up", hint:"of €3,840 completed"},
-  writeupBlocked:{label:"Write-up blocked", value:"€1,730", delta:"3 jobs", dir:"down", hint:"needs confirmation"},
+  writeupBlocked:{label:"Write-up blocked", value:"\u20ac1,730", delta:"3 jobs", dir:"down", hint:"needs confirmation"},
   activeStock:{label:"Active stock", value:"26", delta:"8 incoming", dir:"up", hint:"18 on site"},
-  overdue:{label:"Overdue debt", value:"€10,800", delta:"3 invoices", dir:"down", hint:"of €18,000 outstanding"},
+  overdue:{label:"Overdue debt", value:"\u20ac10,800", delta:"3 invoices", dir:"down", hint:"of \u20ac18,000 outstanding"},
   cvrt:{label:"CVRT today", value:"12", delta:"2 awaiting repair", dir:"up", hint:"bookings"}
 };
 
@@ -767,7 +811,7 @@ const ASPECT_DEFS = [
    splitTitle:"By location",
    split:[["Athlone workshop","64","51%",1],["Sales & stock","48","38%",0],["CVRT centre","14","11%",0]],
    tableCols:["Installer","Jobs","On time","Location"],
-   table:[["Billy Elliott","41","94%","Sales yard"],["Jonathan Keenan","34","88%","Athlone workshop"],["Jack Kelly","28","96%","Athlone workshop"],["Unassigned","4","—","Sales yard"]],
+   table:[["Billy Murphy","41","94%","Sales yard"],["Jonathan Keenan","34","88%","Athlone workshop"],["Jack Kelly","28","96%","Athlone workshop"],["Unassigned","4","—","Sales yard"]],
    metrics:[["Jobs completed","126","+4","up","30 days",[.5,.6,.5,.66,.6,.7,.66,.76,.84]],
      ["Overdue tasks","11","+3","down","past due",[.3,.36,.3,.44,.4,.5,.56,.7,.85]],
      ["Visits completed","38","+11%","up","30 days",[.4,.5,.6,.5,.66,.6,.72,.8,.9]],
@@ -906,7 +950,7 @@ const WORK_TASKS = [
   {id:"w3", title:"Q-1042 — discount + specification review", status:"Review", priority:"High", who:"AR",
    due:"Due 12:00", late:false, client:"Westway Electrical", day:"Today", mins:"15 mins", view:"Review"},
   {id:"w4", title:"V008 — chase rear caliper (ETA 11:30)", status:"In progress", priority:"High", who:"DO",
-   due:"Due 11:30", late:false, client:"Midlands Parcel Services", day:"Today", mins:"Mins", view:"Due tasks"},
+   due:"Due 11:30", late:false, client:"Kelly Logistics", day:"Today", mins:"Mins", view:"Due tasks"},
   {id:"w5", title:"Investigate Friday's 13.0 unallocated hours", status:"Not started", priority:"Medium", who:"JK",
    due:"Today", late:false, client:"Workshop", day:"Today", mins:"30 mins", view:"All tasks"},
   {id:"w6", title:"Flag ETA changes against promised delivery dates", status:"Not started", priority:"Medium", who:"AR",
@@ -916,7 +960,7 @@ const WORK_TASKS = [
 const WORKFLOWS = [
   {name:"Completed job → invoice readiness", state:"live", trigger:"event · job.completed",
    actions:[["jobcard.review","read"],["approvals.route","write"]], lastRun:"Today 09:12",
-   result:"3 ready · 3 blocked", resultKind:"warn", runSummary:"ready €2,110 · blocked €1,730",
+   result:"8 ready · 3 blocked", resultKind:"warn", runSummary:"ready €18,420 · 3 jobs held for write-up",
    runs:["ok","ok","partial","ok","ok","ok","partial","ok","ok","ok","ok","ok","partial","ok"]},
   {name:"Discount approval over €250", state:"live", trigger:"event · quote.discount",
    actions:[["approvals.route","read"],["notify.inbox","write"]], lastRun:"Today 08:50",
@@ -924,7 +968,7 @@ const WORKFLOWS = [
    runs:["ok","ok","ok","ok","ok","ok","ok","ok","ok","ok","ok","ok","ok","ok"]},
   {name:"Failed test → retest", state:"live", trigger:"event · cvrt.result.fail",
    actions:[["repair.open","write"],["notify.inbox","write"]], lastRun:"Today 09:30",
-   result:"ok · V008 repair opened", resultKind:"ok", runSummary:"gates held open",
+   result:"ok · JOB-1046 repair opened", resultKind:"ok", runSummary:"gates held open",
    runs:["idle","ok","ok","ok","ok","ok","ok","ok","idle","ok","ok","ok","ok","ok"]},
   {name:"Weekly order book reconciliation", state:"live", trigger:"schedule · weekly",
    actions:[["import.diff","read"],["tasks.create","write"]], lastRun:"Today 09:00",
@@ -937,10 +981,10 @@ const SCHEDULES = [
   {id:"s2", name:"Ops Watchdog sweep", cadence:"Every 15 min", next:"10:15", owner:"Ops Watchdog", on:true, day:1},
   {id:"s3", name:"Weekly order book import", cadence:"Mondays · 09:00", next:"Done today", owner:"Stock & Specification", on:true, day:0},
   {id:"s4", name:"Invoice readiness summary", cadence:"Daily · 16:00", next:"Today 16:00", owner:"Finance Assistant", on:true, day:3},
-  {id:"s5", name:"Keyloop migration (planned)", cadence:"From December 2026", next:"Planned", owner:"—", on:false, day:4}
+  {id:"s5", name:"Keyloop sync", cadence:"Every 2 minutes", next:"In 2 min", owner:"Keyloop", on:true, day:4}
 ];
 
-const WIDGET_DEFS = [["inbox","Action inbox"],["work","My work"],["activity","Activity"],["kpi","Today's numbers"],["visits","CVRT today"]];
+const WIDGET_DEFS = [["yard","Yard now"],["inbox","Action inbox"],["parts","Parts due today"],["inspect","Inspection replies"],["brief","Morning brief"],["work","My work"],["activity","Activity"],["kpi","Today's numbers"],["visits","CVRT today"]];
 const WORK_WIDGETS = [
   {id:"queue", label:"My queue", value:"8", hint:"assigned to you", icon:"work", queue:"mine"},
   {id:"late", label:"Running late", value:"11", hint:"past their due date", icon:"health", queue:"overdue"},
@@ -1008,14 +1052,16 @@ const FACE_TINTS = [
 
 /* ---- ontology graph: generation, Dijkstra traversal, canvas render ---- */
 const CLUSTERS = [
-  ["Companies",     "#6C8CFF", 0.00, 0.62, 46],
-  ["People",        "#6ad0f0", 0.90, 0.70, 52],
-  ["Documents",     "#b06cf0", 1.75, 0.66, 58],
-  ["Jobs",          "#f0c04b", 2.55, 0.72, 44],
-  ["Invoices",      "#f0567f", 3.35, 0.60, 38],
-  ["Vehicles",      "#5fe0a8", 4.15, 0.70, 40],
-  ["CVRT tests",    "#f0803a", 4.95, 0.64, 30],
-  ["Approvals",     "#5f7cf0", 5.65, 0.72, 34]
+  ["Vehicles",       "#5fe0a8", 0.00, 0.70, 40],
+  ["Customers",      "#6C8CFF", 0.63, 0.62, 46],
+  ["Jobs",           "#f0c04b", 1.26, 0.72, 44],
+  ["Technicians",    "#6ad0f0", 1.88, 0.70, 40],
+  ["Parts and POs",  "#c8f04b", 2.51, 0.66, 38],
+  ["Suppliers",      "#2dd4bf", 3.14, 0.64, 28],
+  ["Communications", "#b06cf0", 3.77, 0.68, 52],
+  ["Invoices",       "#f0567f", 4.40, 0.60, 36],
+  ["CVRT tests",     "#f0803a", 5.03, 0.64, 30],
+  ["Documents",      "#5f7cf0", 5.65, 0.70, 44]
 ];
 
 function mulberry(seed){
@@ -1245,6 +1291,7 @@ export {
   NAV,
   ITEMS,
   ORDER,
+  PROMPTS,
   ANSWERS,
   synthesizeCustomArea,
   pickAnswer,

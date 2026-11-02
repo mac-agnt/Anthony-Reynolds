@@ -1,12 +1,40 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { A, approvals, blocksFor, cname, dur, elapsed, eur, handoverGates, hhmm, pname, quoteGates, techNow, techs, toMin, useDerived, vehicleLabel, type State, type Task } from "./store";
+import { A, approvals, blocksFor, cname, company, dur, elapsed, eur, fmtDate, handoverGates, hhmm, hrs, pname, quoteGates, techNow, techs, toMin, useDerived, vehicleLabel, type State, type Task } from "./store";
 import { ATTENDANCE, ON_CALL, SAFETY, STAFF } from "./fixtures";
-import { Portal, Avatar, Btn, Card, Chip, Empty, Field, Flag, Head, JLink, Metric, Note, Page, Seg, Table, VLink, canSeeMoney } from "./ui";
+import { Portal, Avatar, Btn, Card, Chip, Empty, Field, Flag, Head, JLink, Metric, Note, Page, Seg, Table, canSeeMoney } from "./ui";
+import { RegLink as VLink } from "./recordNav";
 import { go } from "./nav";
+import { fmtWhen, partsOverview, yardCounts } from "./yard";
 
 const recordLink = (r: string) => r.startsWith("JOB-") ? <JLink id={r} /> : /^V\d|^C\d/.test(r) ? <VLink id={r} /> : r.startsWith("Q-") ? <button className="d-link" onClick={() => { A.focus("quote", r); go("Sales", "quote"); }}>{r}</button> : <span className="d-muted">{r}</span>;
 
 /* ═════════════════════════ TASKS ═════════════════════════ */
+/** Registration and customer for the record a task points at, so a task never shows a bare internal id. */
+function labelOf(s: State, record: string): string | null {
+  const id = /^V\d|^C\d/.test(record) ? record : record.startsWith("JOB-") ? s.jobs.find(j => j.id === record)?.vehicle : undefined;
+  if (!id) return null;
+  const l = vehicleLabel(s, id);
+  return l.customer && l.reg !== id ? `${l.reg} · ${cname(l.customer)}` : l.customer ? cname(l.customer) : null;
+}
+
+/** Follow-ups Pulse raises from the live yard. Derived each time, so they disappear when the cause is resolved. */
+function YardTasks() {
+  const [s] = useDerived();
+  const yc = yardCounts(s);
+  const rows: { k: string; tone: "bad" | "warn"; what: string; owner: string; key: string; due: string }[] = [
+    ...yc.accounts.map(v => ({ k: "a" + v.key, tone: "bad" as const, what: `Accounts approval needed, ${eur(v.balance)} outstanding for ${v.customer}`, owner: "p-caroline", key: v.key, due: "Today" })),
+    ...yc.cvrt.map(v => ({ k: "c" + v.key, tone: "bad" as const, what: `Retest and accounts clearance before ${v.customer} can collect`, owner: "p-elizabeth", key: v.key, due: v.promised ? fmtWhen(v.promised) : "Today" })),
+    ...yc.parts.map(v => ({ k: "p" + v.key, tone: "warn" as const, what: `Chase ${v.part?.part.replace(/ \(.*\)/, "") ?? "part"} (${v.part?.po ?? "PO"}), ETA ${v.part?.eta ?? "to confirm"}`, owner: v.part?.owner ?? "p-darren", key: v.key, due: v.part?.eta ?? "" })),
+    ...yc.approval.map(v => ({ k: "w" + v.key, tone: "warn" as const, what: `Chase ${v.customer} for approval of the extra work`, owner: "p-s4", key: v.key, due: "Today" })),
+    ...yc.unknown.map(v => ({ k: "u" + v.key, tone: "warn" as const, what: `Identify the vehicle read as ${v.reg} at the gate`, owner: "p-s8", key: v.key, due: "Today" })),
+  ];
+  if (!rows.length) return null;
+  return (
+    <Card title={<>Raised by Pulse from the yard <span className="d-muted">({rows.length})</span></>} aside={<span className="d-muted">derived live, clears itself</span>} style={{ marginTop: 14 }}>
+      {rows.map(r => <div className="d-li" key={r.k} style={{ flexWrap: "wrap" }}><Chip tone={r.tone}>{r.due || "Open"}</Chip><VLink id={r.key} /><span className="d-grow">{r.what}</span><span className="d-row" style={{ gap: 6 }}><Avatar id={r.owner} size={22} /><span className="d-muted">{pname(r.owner)}</span></span></div>)}
+    </Card>
+  );
+}
 function Capture({ close }: { close: () => void }) {
   const [t, setT] = useState<Omit<Task, "id" | "status">>({ title: "", owner: "p-anthony", due: "This week", priority: "Medium", dept: "Workshop", record: "V019", kind: "improvement", acceptance: "" });
   const records = ["V019", "V024", "V008", "JOB-1041", "JOB-1042", "Q-1042", "LIVE", "FRIDAY", "meeting"];
@@ -42,19 +70,35 @@ export function Tasks() {
       </Head>
       <Card className="flush"><Table rowKey={t => t.id} rows={rows} cols={[
         { key: "d", label: "", render: t => <input type="checkbox" aria-label={`Done: ${t.title}`} checked={t.status === "done"} onChange={() => A.toggleTask(t.id)} /> },
-        { key: "t", label: "Task", render: t => <div><b style={{ fontWeight: 500 }}>{t.title}</b>{t.acceptance && <div className="d-muted" style={{ fontSize: 11.5 }}>Accept when: {t.acceptance}</div>}</div>, sort: t => t.title },
+        { key: "t", label: "Task", render: t => { const lab = labelOf(s, t.record); return <div><b style={{ fontWeight: 500 }}>{t.title}</b>{lab && <div className="d-muted" style={{ fontSize: 11.5 }}>{lab}</div>}{t.acceptance && <div className="d-muted" style={{ fontSize: 11.5 }}>Accept when: {t.acceptance}</div>}{t.id === "TK-7" && <div style={{ marginTop: 4 }}><Chip tone="ok">Built in this demo</Chip> <button className="d-link" onClick={() => go("Work", "meeting")}>See the Downtime slide</button></div>}</div>; }, sort: t => t.title },
         { key: "k", label: "Type", render: t => <Chip tone={t.kind === "improvement" ? "acc" : undefined}>{t.kind === "improvement" ? "Improvement" : "Task"}</Chip> },
         { key: "o", label: "Owner", render: t => <span className="d-row" style={{ gap: 6 }}><Avatar id={t.owner} size={22} />{pname(t.owner)}</span>, sort: t => pname(t.owner) },
         { key: "du", label: "Due", render: t => t.due }, { key: "p", label: "Priority", render: t => <Chip tone={t.priority === "High" ? "warn" : undefined}>{t.priority}</Chip>, sort: t => t.priority },
         { key: "de", label: "Department", render: t => t.dept, sort: t => t.dept }, { key: "r", label: "Record", render: t => recordLink(t.record) },
         { key: "s", label: "Story", render: t => t.story ? <span className="d-mono">{t.story}</span> : "—" },
       ]} empty="No tasks in this view." /></Card>
+      <YardTasks />
       {cap && <Portal><Capture close={() => setCap(false)} /></Portal>}
     </Page>
   );
 }
 
 /* ═════════════════════════ APPROVALS ═════════════════════════ */
+/** The customer message behind the V008 approval, written from the live job, part and customer records. */
+function V8Draft() {
+  const [s] = useDerived();
+  const l = vehicleLabel(s, "V008");
+  const co = company(l.customer);
+  const pb = s.jobs.find(j => j.id === "JOB-1046")?.partBlocker;
+  const test = s.cvrt.find(c => c.vehicle === "V008");
+  const text = `Hi ${co?.contact.split(" ")[0] ?? "there"}, an update on ${l.reg}. The van did not pass its CVRT test this morning (${(test?.failItems?.[0] ?? "brake fault").replace(/^./, c => c.toLowerCase())}). ${pb && !pb.received ? `The replacement caliper is due ${pb.eta.toLowerCase()}` : "The replacement caliper is here"}, then we fit it and retest. We will confirm a collection date once the retest is recorded.`;
+  return (
+    <div className="pres-panel" style={{ margin: "8px 0", padding: 12, fontSize: 12.5 }}>
+      <div className="d-row" style={{ marginBottom: 6 }}><Chip tone="acc">Draft</Chip><span className="d-muted">To {co?.contact}, {co?.name} · via {co?.channel ?? "email"} (their preferred channel) · {l.reg}</span></div>
+      <div style={{ lineHeight: 1.5 }}>{text}</div>
+    </div>
+  );
+}
 export function Approvals() {
   const [s, d] = useDerived();
   const items = approvals(s, d);
@@ -80,6 +124,7 @@ export function Approvals() {
         <div className="d-grid">{shown.length ? shown.map(i => (
           <Card key={i.id} title={<><Chip tone="warn">{i.queue}</Chip> {i.title}</>} aside={<span className="d-row" style={{ gap: 6 }}><Avatar id={i.reviewer} size={22} /><span className="d-muted">{pname(i.reviewer)}</span></span>}>
             <div className="d-list">{i.evidence.map(e => <div className="d-li" key={e}><span className="d-muted">Evidence</span><span className="d-grow">{e}</span></div>)}</div>
+            {i.id === "cc-V008" && <V8Draft />}
             <div className="d-muted" style={{ margin: "8px 0" }}><b style={{ color: "var(--ink)" }}>If approved:</b> {i.consequence}</div>
             <div className="d-row">{act(i)}<span className="d-grow" />{recordLink(i.record)}</div>
           </Card>)) : <Empty>Nothing waiting in this queue.</Empty>}</div>
@@ -204,12 +249,19 @@ function Slide({ id, s, techIdx }: { id: string; s: State; techIdx: number }) {
       <Panel label="Anniversary"><div className="pres-mid">Ronan Keville — 5 years at Reynolds</div><div className="d-muted">Fictional example · shared with consent</div></Panel>
       <Panel label="Event"><div className="pres-mid">Workshop BBQ — Friday 16:30</div><div className="d-muted">Yard, weather permitting</div></Panel>
       <Panel label="Welcome"><div className="pres-mid">Gavin Tuohy joins sales admin full-time</div><div className="d-muted">Fictional example</div></Panel></div>{N}</>;
-    case "downtime": return <><h2>Downtime and holds</h2><Note>Proposed composition — the recording shows the section name only.</Note><div className="d-grid d-g2">
-      <Panel label="Parts holds">{d.awaitingParts.map(j => <div key={j.id} className="pres-mid">{j.id} · {j.partBlocker?.part} · ETA {j.partBlocker?.eta}</div>)}{!d.awaitingParts.length && <div className="pres-mid d-muted">None</div>}</Panel>
-      <Panel label="Equipment"><div className="pres-mid">Brake roller lane 2 — calibration check 14:00 (sample)</div></Panel></div>{N}</>;
+    case "downtime": {
+      const po = partsOverview(s), yc = yardCounts(s);
+      const reg = (j: import("./fixtures").Job) => vehicleLabel(s, j.vehicle).reg;
+      return <><h2>Downtime and holds</h2><div className="d-grid d-g2">
+        <Panel label={`Parts holds · ${po.open.length} jobs · ${hrs(po.lostHours)} lost today`}>{po.open.map(j => <div key={j.id} className="pres-mid" style={{ padding: "5px 0" }}><b>{reg(j)}</b> {j.partBlocker?.part.replace(/ \(.*\)/, "")}<div className="d-muted" style={{ fontSize: 15 }}>ETA {j.partBlocker?.eta} · {j.partBlocker?.po}{(j.partBlocker?.stalled || j.status === "awaiting_parts") ? " · vehicle stalled" : " · work continues"}</div></div>)}{!po.open.length && <div className="pres-mid d-muted">None</div>}</Panel>
+        <div className="d-grid">
+          <Panel label="Vehicle holds">{[...yc.accounts.map(v => [v, `Accounts hold, ${eur(v.balance)}`] as const), ...yc.cvrt.map(v => [v, "CVRT failed, retest to book"] as const), ...yc.approval.map(v => [v, "Waiting for customer approval"] as const)].map(([v, why]) => <div key={v.key} className="pres-mid d-row" style={{ gap: 10, flexWrap: "wrap" }}><b>{v.reg}</b><span className="d-muted">{why}</span></div>)}</Panel>
+          <Panel label="Equipment"><div className="pres-mid">Brake roller lane 2: calibration check 14:00 (sample)</div></Panel>
+        </div></div><Note>Built from Parts &amp; Blockers and the yard, so it changes when a part arrives or an account clears.</Note>{N}</>;
+    }
     case "updates": return <><h2>Department updates</h2><Note>Proposed composition.</Note><div className="d-grid d-g2">
-      <Panel label="Parts · Darren"><div className="pres-mid">V008 rear caliper due 11:30.</div></Panel>
-      <Panel label="Sales · Jack"><div className="pres-mid">V024 chassis cab arrives tomorrow; Q-1042 waiting on spec + discount.</div></Panel>
+      <Panel label="Parts · Darren"><div className="pres-mid">{(() => { const j = s.jobs.find(x => x.id === "JOB-1046"); const pb = j?.partBlocker; return pb ? `${vehicleLabel(s, "V008").reg}: ${pb.part.toLowerCase()} ${pb.received ? "received" : "due " + pb.eta.toLowerCase()} (${pb.po}). ${partsOverview(s).open.length} jobs waiting for parts.` : `${partsOverview(s).open.length} jobs waiting for parts.`; })()}</div></Panel>
+      <Panel label="Sales · Jack"><div className="pres-mid">{(() => { const v = s.stock.find(x => x.id === "V024"); return `V024 chassis cab ${v?.eta ? fmtWhen(v.eta).toLowerCase() : "due"}; Q-1042 waiting on spec and discount.`; })()}</div></Panel>
       <Panel label="CVRT · Elizabeth"><div className="pres-mid">{s.cvrt.length} bookings today · {d.cvrt.repair.length} awaiting repair · {d.cvrt.retest.length} retest.</div></Panel>
       <Panel label="Workshop · Jonathan"><div className="pres-mid">{d.hopper.length} jobs still to allocate from the hopper.</div></Panel></div>{N}</>;
     case "readiness": {

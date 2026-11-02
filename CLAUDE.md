@@ -42,3 +42,13 @@ That wipes the guards above. Don't run it on a customised copy.
 
 - `npm run typecheck` passes.
 - Check Home, Dashboard and every Records tab in the browser: highlight on the right tab, Ontology first, Agents under Home, nothing extra in the Home centre.
+
+## Yard model (Nov 2026 revision)
+
+The product is vehicle-centric: Keyloop is the system of record, Pulse is the live layer on top. "What's the story with that vehicle?" is the test.
+
+- Source of truth for what is on site: `src/demo/yardData.ts` (YARD_ROWS, ANPR_EVENTS, COMMS, NOTICES, KEYLOOP). Logic in `src/demo/yard.ts`. Jobs, parts blockers, CVRT and receivables stay in `fixtures.ts` / `store.ts`. Never retype a number or name in a page: derive it.
+- Registrations link to the Vehicle page with `openVehicle(key)` (deep link `#vehicle/<reg>`). Do not add new vehicle drawers.
+- Headline numbers (42 on site, 8 arrived, 11 ready, 7 blocked, 16 overnight, 2 unknown; 24 open jobs, 7 waiting parts, 8 ready to invoice) are guarded by `npm run check:yard`. Run it after touching fixtures.
+- Keyloop is shown as connected (demo representation). Say so in copy; never claim every API exists.
+- MD view is a standalone phone app at `#md`. Default theme is light.

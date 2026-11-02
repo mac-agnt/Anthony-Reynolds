@@ -1,40 +1,172 @@
 import { useState } from "react";
-import { A, DISCOUNT_THRESHOLD, cname, company, eur, fmtDate, handoverGates, pname, quoteGates, quoteTotals, standingCost, useDerived, type State } from "./store";
+import { A, DEMO_DATE, DISCOUNT_THRESHOLD, cname, company, daysBetween, eur, fmtDate, handoverGates, pname, quoteGates, quoteTotals, standingCost, useDerived, vehicleLabel, type State } from "./store";
 import { COMPANIES, SERVICE_VEHICLES, type Quote, type QuoteStage } from "./fixtures";
-import { Avatar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, Metric, Note, NumInput, Page, QLink, RoleHidden, Seg, Table, VLink, canSeeCost, canSeeMoney } from "./ui";
+import { Avatar, Btn, CLink, Card, Chip, Empty, Field, Flag, Head, Metric, Note, NumInput, Page, QLink, RoleHidden, Seg, Table, canSeeCost, canSeeMoney } from "./ui";
+import { RegLink as VLink } from "./recordNav";
 import { go } from "./nav";
+import { TODAY_ISO, fmtWhen } from "./yard";
+import "./sales2.css";
+import { KeyloopBadge } from "./keyloop";
 import { RECEIVABLES } from "./fixtures";
-import { daysBetween } from "./store";
 
 const STAGES: QuoteStage[] = ["Enquiry", "Quoted", "Approval", "Reserved", "Won"];
 const statusOf = (s: State, q: Quote) => { const g = quoteGates(s, q); return g.ready ? "Ready for customer" : g.needsDiscount && !g.discountOk ? "Awaiting approval" : !g.specOk ? "Awaiting specification" : "Draft"; };
 
 /* ═════════════════════════ PIPELINE ═════════════════════════ */
+type PStage = "NEW ENQUIRY" | "CONTACTED" | "QUALIFIED" | "QUOTED" | "FINANCE" | "NEGOTIATION" | "ORDERED" | "PREPARATION" | "HANDOVER" | "COMPLETE" | "LOST";
+const PSTAGES: PStage[] = ["NEW ENQUIRY", "CONTACTED", "QUALIFIED", "QUOTED", "FINANCE", "NEGOTIATION", "ORDERED", "PREPARATION", "HANDOVER", "COMPLETE", "LOST"];
+const EARLY: PStage[] = ["NEW ENQUIRY", "CONTACTED", "QUALIFIED", "QUOTED"];
+
+/* Sales-only demo dataset. These opportunities exist only in the Sales pipeline; no other module reads
+   them, so stock, workshop and finance totals are unchanged. Quotes, handovers and sold vehicles come from the store. */
+interface DemoOpp { id: string; stage: PStage; customer: string | null; prospect?: string; title: string; want?: { model: string; variant?: RegExp }; vehicle?: string; value: number; owner: string; next: string; due: string | null; touch: number }
+const DEMO_OPPS: DemoOpp[] = [
+  { id: "OPP-2101", stage: "NEW ENQUIRY", customer: null, prospect: "Athlone Skip and Plant", title: "Master tipper, web enquiry at 08:12", want: { model: "Master", variant: /tipper/i }, value: 38500, owner: "p-jack", next: "Call back and qualify", due: "2026-10-19", touch: 0 },
+  { id: "OPP-2102", stage: "NEW ENQUIRY", customer: null, prospect: "Roscommon Meats", title: "D14 rigid with fridge body, phone enquiry", want: { model: "D14" }, value: 66500, owner: "p-s6", next: "Log the enquiry in Keyloop", due: "2026-10-19", touch: 0 },
+  { id: "OPP-2103", stage: "CONTACTED", customer: null, prospect: "Westmeath Cabling", title: "Trafic crew van", want: { model: "Trafic", variant: /crew/i }, value: 31900, owner: "p-jack", next: "No answer Friday, ring again", due: "2026-10-17", touch: 3 },
+  { id: "OPP-2104", stage: "CONTACTED", customer: "c-shannon", title: "Second D18 curtainsider after V013", want: { model: "D18" }, value: 67800, owner: "p-jack", next: "Send the specification sheet", due: "2026-10-20", touch: 2 },
+  { id: "OPP-2105", stage: "CONTACTED", customer: null, prospect: "Dunmore Agri Services", title: "Master dropside", want: { model: "Master", variant: /dropside/i }, value: 36800, owner: "p-jack", next: "Chase. Last spoke on 2 Oct", due: "2026-10-12", touch: 17 },
+  { id: "OPP-2106", stage: "QUALIFIED", customer: "c-doyle", title: "Two T High tractor units, trade-in 192-D-6771", want: { model: "T High" }, value: 238000, owner: "p-anthony", next: "Prepare the quote with the trade-in", due: "2026-10-21", touch: 1 },
+  { id: "OPP-2107", stage: "QUALIFIED", customer: "c-kelly", title: "Two Master LH35 panel vans, fleet expansion", want: { model: "Master", variant: /LH35/i }, value: 65000, owner: "p-jack", next: "Confirm spec and delivery window", due: "2026-10-22", touch: 4 },
+  { id: "OPP-2108", stage: "QUOTED", customer: "c-midlands", title: "Three Trafic SL30 vans, quote issued 7 Oct", value: 91200, owner: "p-jack", next: "No reply, ring Noel Grehan", due: "2026-10-16", touch: 12 },
+  { id: "OPP-2109", stage: "FINANCE", customer: null, prospect: "Lough Ree Haulage", title: "D18 rigid 4x2, finance application with the lender", value: 71500, owner: "p-jack", next: "Lender decision due Wednesday", due: "2026-10-21", touch: 2 },
+  { id: "OPP-2110", stage: "NEGOTIATION", customer: "c-galway", title: "T480 tractor unit, discount and trade-in value", value: 112500, owner: "p-anthony", next: "Agree the discount and trade-in", due: "2026-10-20", touch: 1 },
+  { id: "OPP-2111", stage: "ORDERED", customer: "c-mayo", title: "Master chassis cab, promised for 28 Oct", vehicle: "V019", value: 33900, owner: "p-jack", next: "Chase the factory ETA", due: "2026-10-24", touch: 3 },
+  { id: "OPP-2112", stage: "PREPARATION", customer: "c-westway", title: "Master LH35 panel van, pre-delivery inspection", vehicle: "V016", value: 35400, owner: "p-jack", next: "PDI booked today", due: "2026-10-19", touch: 1 },
+  { id: "OPP-2113", stage: "LOST", customer: null, prospect: "Kerry Plant Sales", title: "Master tipper. Lost on price, a competitor dealer was 1,900 lower", value: 41800, owner: "p-jack", next: "Closed", due: null, touch: 6 },
+  { id: "OPP-2114", stage: "LOST", customer: null, prospect: "Dromod Tipper Hire", title: "Bought a used tipper elsewhere", value: 36200, owner: "p-s6", next: "Closed", due: null, touch: 9 },
+];
+/* Selling prices for the two handover vehicles that have no quote record (sales-only demo values). */
+const SALE_VALUE: Record<string, { value: number; due: string }> = { V008: { value: 17900, due: "2026-10-19" }, V013: { value: 74500, due: "2026-10-21" } };
+
+interface Opp {
+  id: string; stage: PStage; customerId: string | null; customer: string; title: string; vehicle: string | null; value: number | null; owner: string; next: string; due: string | null;
+  touch: number; matches: string[]; gate: boolean; open: () => void; demo: boolean;
+}
+const dueOf = (label: string): string | null => {
+  if (/today/i.test(label)) return TODAY_ISO;
+  const m = /(\d{1,2}) (Oct|Nov)/.exec(label);
+  return m ? `2026-${m[2] === "Oct" ? "10" : "11"}-${m[1].padStart(2, "0")}` : null;
+};
+const daysAgo = (label: string) => Math.max(0, Math.round((DEMO_DATE.getTime() - new Date(label).getTime()) / 86400000));
+
+function stageOfVehicle(s: State, id: string, nextAction = ""): PStage {
+  if (s.gates[id]?.handedOver) return "COMPLETE";
+  const h = handoverGates(s, id);
+  if (h.list.some(x => ["parts", "repair", "test"].includes(x.key) && !x.ok)) return "PREPARATION";
+  if (!h.ready && /finance/i.test(nextAction)) return "FINANCE";
+  return "HANDOVER";
+}
+function matchesFor(s: State, want?: DemoOpp["want"]): string[] {
+  if (!want) return [];
+  return s.stock.filter(v => v.status === "available" && v.model === want.model && (!want.variant || want.variant.test(v.variant))).map(v => v.id);
+}
+
+export function opportunities(s: State): Opp[] {
+  const out: Opp[] = [];
+  const wantOfQuote: Record<string, DemoOpp["want"]> = { "Q-1041": { model: "Master", variant: /tipper/i } };
+  s.quotes.forEach(q => {
+    const stage: PStage = q.stage === "Enquiry" ? "NEW ENQUIRY" : q.stage === "Quoted" ? "QUOTED" : q.stage === "Approval" ? "NEGOTIATION" : q.stage === "Won" ? "COMPLETE"
+      : q.vehicle && s.gates[q.vehicle] ? stageOfVehicle(s, q.vehicle, q.nextAction) : "ORDERED";
+    const net = quoteTotals(q).net;
+    out.push({ id: q.id, stage, customerId: q.customer, customer: cname(q.customer), title: q.vehicle ? `${vehicleLabel(s, q.vehicle).model} (${q.vehicle})` : "Tipper, vehicle not matched yet", vehicle: q.vehicle,
+      value: net || null, owner: q.owner, next: q.nextAction, due: dueOf(q.due), touch: daysAgo(q.date), matches: q.vehicle ? [] : matchesFor(s, wantOfQuote[q.id]), gate: !!(q.vehicle && s.gates[q.vehicle]), demo: false,
+      open: () => { A.focus("quote", q.id); go("Sales", "quote"); } });
+  });
+  Object.keys(s.gates).filter(id => !s.quotes.some(q => q.vehicle === id)).forEach(id => {
+    const v = s.stock.find(x => x.id === id)!, sv = SALE_VALUE[id];
+    const open = handoverGates(s, id).list.filter(g => !g.ok);
+    out.push({ id, stage: stageOfVehicle(s, id), customerId: v.customer, customer: cname(v.customer), title: `${vehicleLabel(s, id).model}${v.reg ? ` (${v.reg})` : ""}`, vehicle: id, value: sv?.value ?? null, owner: "p-jack",
+      next: s.gates[id].handedOver ? "Handed over" : open.length ? `Open: ${open.map(g => g.label.toLowerCase()).join(", ")}` : "All gates clear, book the handover", due: sv?.due ?? null, touch: 1, matches: [], gate: true, demo: false, open: () => go("Sales", "handovers") });
+  });
+  DEMO_OPPS.forEach(o => {
+    const job = o.vehicle ? s.jobs.find(j => j.vehicle === o.vehicle) : undefined;
+    const v = o.vehicle ? s.stock.find(x => x.id === o.vehicle) : undefined;
+    out.push({ id: o.id, stage: o.stage, customerId: o.customer, customer: o.customer ? cname(o.customer) : (o.prospect ?? "Prospect"), title: o.title, vehicle: o.vehicle ?? null, value: o.value, owner: o.owner,
+      next: job && o.stage === "PREPARATION" ? `${job.id} ${job.status === "in_progress" ? "in progress" : `planned ${job.plannedStart ?? "today"}`}` : v?.eta && o.stage === "ORDERED" ? `Factory ETA ${fmtDate(v.eta)}, promised 28 Oct` : o.next,
+      due: o.due, touch: o.touch, matches: EARLY.includes(o.stage) ? matchesFor(s, o.want) : [], gate: false, demo: true,
+      open: () => { if (o.customer) A.open("company", o.customer); else A.toast(`${o.prospect} is a prospect, not yet a Keyloop customer record`); } });
+  });
+  s.stock.filter(v => v.status === "sold" && v.sold).forEach(v => out.push({ id: v.id, stage: "COMPLETE", customerId: v.sold!.buyer, customer: cname(v.sold!.buyer), title: `Renault ${v.model} ${v.variant}`, vehicle: v.id, value: v.sold!.amount, owner: "p-jack",
+    next: `Sold ${fmtDate(v.sold!.date)}${Object.values(v.sold!.checklist).every(Boolean) ? "" : ", post-sale checklist open"}`, due: null, touch: daysBetween(v.sold!.date), matches: [], gate: false, demo: false, open: () => A.open("vehicle", v.id) }));
+  return out;
+}
+
+type PFilter = "overdue" | "quotes" | "match" | "finance" | "handover" | "dormant";
+const isLive = (o: Opp) => o.stage !== "COMPLETE" && o.stage !== "LOST";
+const isOverdue = (o: Opp) => isLive(o) && !!o.due && o.due < TODAY_ISO;
+const isDormant = (o: Opp) => EARLY.includes(o.stage) && o.touch >= 10;
+const FILTER_FN: Record<PFilter, (o: Opp) => boolean> = {
+  overdue: isOverdue, quotes: o => o.stage === "QUOTED", match: o => o.matches.length > 0, finance: o => o.stage === "FINANCE", handover: o => o.gate && isLive(o), dormant: isDormant,
+};
+
+function OppCard({ o }: { o: Opp }) {
+  return (
+    <div className={"s-card" + (o.stage === "LOST" ? " lost" : "")} onClick={o.open} role="button" tabIndex={0} onKeyDown={e => { if (e.key === "Enter") o.open(); }}>
+      <div className="top"><b>{o.id}</b>{o.demo && <span className="s-demo" title="Sales-only demo row">DEMO</span>}<span className="d-grow" /><Avatar id={o.owner} size={22} /></div>
+      <div className="t">{o.customerId ? <CLink id={o.customerId} /> : o.customer}</div>
+      <div className="m">{o.title}</div>
+      <div className="m"><span className="val d-mono">{o.value ? eur(o.value) : "Value to confirm"}</span>{o.vehicle && <> · <VLink id={o.vehicle} /></>}</div>
+      <div className="m">Next: {o.next}{o.due ? <> · <b style={{ fontWeight: 500, color: isOverdue(o) ? "var(--bad)" : undefined }}>{fmtWhen(o.due)}</b></> : null}</div>
+      <div className="chips">
+        {isOverdue(o) && <Chip tone="bad">Follow-up overdue</Chip>}
+        {isDormant(o) && <Chip tone="warn">Dormant {o.touch} days</Chip>}
+        {o.matches.length > 0 && <Chip tone="acc">Stock match {o.matches.slice(0, 2).join(", ")}</Chip>}
+        {o.gate && o.stage !== "COMPLETE" && <Chip tone={handoverGatesOk(o) ? "ok" : "warn"}>{handoverGatesOk(o) ? "Gates clear" : "Gates open"}</Chip>}
+      </div>
+    </div>
+  );
+}
+const handoverGatesOk = (o: Opp) => o.stage === "HANDOVER" && !/Open:/.test(o.next);
+
 export function Pipeline() {
   const [s] = useDerived();
-  const quotes = s.quotes;
+  const [f, setF] = useState<PFilter | null>(null);
+  const [view, setView] = useState<"board" | "list">("board");
+  const all = opportunities(s);
+  const shown = f ? all.filter(FILTER_FN[f]) : all;
+  const live = all.filter(isLive);
+  const gateIds = Object.keys(s.gates).filter(id => !s.gates[id].handedOver);
+  const gateReady = gateIds.filter(id => handoverGates(s, id).ready).length;
+  const metrics: { k: PFilter; label: string; n: number; hint: string; tone?: "bad" | "warn" }[] = [
+    { k: "overdue", label: "Follow-ups overdue", n: all.filter(isOverdue).length, hint: "past their due date", tone: "bad" },
+    { k: "quotes", label: "Quotes awaiting response", n: all.filter(FILTER_FN.quotes).length, hint: `${eur(all.filter(FILTER_FN.quotes).reduce((t, o) => t + (o.value ?? 0), 0))} with customers` },
+    { k: "match", label: "Stock matches", n: all.filter(FILTER_FN.match).length, hint: "enquiries with matching stock on the ground" },
+    { k: "finance", label: "Finance pending", n: all.filter(FILTER_FN.finance).length, hint: "waiting on documents or a lender", tone: "warn" },
+    { k: "handover", label: "Handovers", n: gateIds.length, hint: `${gateReady} ready, ${gateIds.length - gateReady} blocked` },
+    { k: "dormant", label: "Dormant opportunities", n: all.filter(isDormant).length, hint: "no contact for 10 days or more", tone: "warn" },
+  ];
   return (
     <Page>
-      <Head title="Sales pipeline" sub="Operational stages with the next action and owner. Counts and values derive from the rows; no conversion rates without closed outcomes.">
+      <Head title="Sales pipeline" sub={`${live.length} live opportunities worth ${eur(live.reduce((t, o) => t + (o.value ?? 0), 0))}. Sales is a secondary module: the yard and workshop come first.`}>
+        <Seg value={view} onChange={setView} options={[["board", "Board"], ["list", "List"]]} label="View" />
         <Btn kind="primary" onClick={() => { A.focus("quote", "Q-1042"); go("Sales", "quote"); }}>Open Q-1042</Btn>
       </Head>
-      <div className="d-grid d-g5">
-        {STAGES.map(st => {
-          const qs = quotes.filter(q => q.stage === st);
-          return <div key={st} className="d-grid" style={{ gap: 10, alignContent: "start" }}>
-            <div className="d-row"><b>{st}</b><Chip>{qs.length}</Chip><span className="d-grow" /><span className="d-mono d-muted">{eur(qs.reduce((t, q) => t + quoteTotals(q).net, 0))}</span></div>
-            {qs.map(q => (
-              <div key={q.id} className="d-card" style={{ padding: 12, cursor: "pointer" }} onClick={() => { A.focus("quote", q.id); go("Sales", "quote"); }}>
-                <div className="d-row" style={{ gap: 6 }}><b>{q.id}</b><span className="d-grow" /><Avatar id={q.owner} size={22} /></div>
-                <div style={{ fontWeight: 500, marginTop: 4 }}>{cname(q.customer)}</div>
-                <div className="d-muted" style={{ fontSize: 11.5 }}>{q.vehicle ? `${q.vehicle} · ` : ""}{eur(quoteTotals(q).net)} net</div>
-                <div className="d-muted" style={{ fontSize: 11.5, marginTop: 6 }}>Next: {q.nextAction} · {q.due}</div>
-                {q.stage !== "Won" && q.stage !== "Enquiry" && <div style={{ marginTop: 6 }}><Chip tone={quoteGates(s, q).ready ? "ok" : "warn"}>{statusOf(s, q)}</Chip></div>}
-              </div>))}
-            {!qs.length && <Empty>None</Empty>}
+      <div className="s-metrics">{metrics.map(m => (
+        <button key={m.k} className={"s-m " + (f === m.k ? "on " : "") + (m.n && m.tone ? m.tone : "")} onClick={() => setF(f === m.k ? null : m.k)} aria-pressed={f === m.k}>
+          <div className="d-eyebrow">{m.label}</div><div className="v">{m.n}</div><div className="h">{m.hint}</div>
+        </button>))}</div>
+      <div style={{ marginBottom: 10 }}><Note>Quotes, handovers and sold vehicles come from Pulse records. Cards marked DEMO are sample enquiries used on this page only.</Note></div>
+      {f && <div className="d-row" style={{ marginBottom: 10 }}><Chip tone="acc">Showing {shown.length} of {all.length}: {metrics.find(m => m.k === f)?.label}</Chip><Btn sm kind="ghost" onClick={() => setF(null)}>Clear filter</Btn></div>}
+      {view === "board" ? (
+        <div className="s-board" tabIndex={0} aria-label="Pipeline board, scrolls sideways">{PSTAGES.map(st => {
+          const os = shown.filter(o => o.stage === st);
+          return <div key={st} className="s-col">
+            <div className="s-colhead"><b>{st}</b><Chip>{os.length}</Chip><span className="val">{eur(os.reduce((t, o) => t + (o.value ?? 0), 0))}</span></div>
+            {os.map(o => <OppCard key={o.id} o={o} />)}
+            {!os.length && <div className="s-empty">None</div>}
           </div>;
-        })}
-      </div>
+        })}</div>
+      ) : (
+        <Card className="flush"><Table rowKey={o => o.id} rows={shown} onRow={o => o.open()} cols={[
+          { key: "st", label: "Stage", render: o => <Chip tone={o.stage === "LOST" ? "bad" : o.stage === "COMPLETE" ? "ok" : undefined}>{o.stage}</Chip>, sort: o => PSTAGES.indexOf(o.stage) },
+          { key: "id", label: "Ref", render: o => <b>{o.id}</b>, sort: o => o.id }, { key: "c", label: "Customer", render: o => o.customer, sort: o => o.customer },
+          { key: "t", label: "Opportunity", render: o => <span className="d-muted">{o.title}</span> },
+          { key: "v", label: "Value", num: true, render: o => o.value ? eur(o.value) : "-", sort: o => o.value ?? 0 },
+          { key: "n", label: "Next action", render: o => o.next }, { key: "d", label: "Due", render: o => o.due ? <span style={{ color: isOverdue(o) ? "var(--bad)" : undefined }}>{fmtWhen(o.due)}</span> : "-", sort: o => o.due ?? "z" },
+          { key: "o", label: "Owner", render: o => pname(o.owner) },
+        ]} /></Card>
+      )}
     </Page>
   );
 }
@@ -165,10 +297,11 @@ export function Customers() {
   }));
   return (
     <Page>
-      <Head title="Customers" sub="Shared company view across workshop, CVRT and sales. All customers are fictional demo companies." />
+      <Head title="Customers" sub="Shared company view across workshop, CVRT and sales. All customers are fictional demo companies."><KeyloopBadge /></Head>
       <Card className="flush"><Table rowKey={r => r.c.id} rows={rows} onRow={r => A.open("company", r.c.id)} cols={[
         { key: "n", label: "Company", render: r => <b style={{ fontWeight: 500 }}>{r.c.name}</b>, sort: r => r.c.name },
         { key: "t", label: "Type", render: r => r.c.type }, { key: "ct", label: "Contact", render: r => r.c.contact },
+        { key: "ac", label: "Keyloop account", render: r => <span className="d-mono d-muted">{r.c.account ?? "-"}</span> }, { key: "ch", label: "Prefers", render: r => r.c.channel ?? "-" },
         { key: "v", label: "Vehicles", num: true, render: r => r.vehicles, sort: r => r.vehicles },
         { key: "j", label: "Live jobs", num: true, render: r => r.jobs, sort: r => r.jobs },
         { key: "te", label: "Tests today", num: true, render: r => r.tests, sort: r => r.tests },

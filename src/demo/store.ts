@@ -8,6 +8,7 @@ import {
   MEETING_SECTIONS, ORDER_BOOK_NEXT, QUOTES, RATE, RECEIVABLES, SAMPLE_OPERATIONS, SERVICE_VEHICLES, SNAPSHOT_MIN, STAFF, STOCK,
   type CvrtBooking, type Job, type Quote, type Vehicle,
 } from "./fixtures";
+import type { NoticeStage } from "./yardData";
 
 /* ---- time + format helpers ---------------------------------------------- */
 export const toMin = (t: string) => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
@@ -30,6 +31,25 @@ export interface Run { id: string; agent: string; at: string; status: "Draft pre
 export interface GapReview { cls: "internal" | "explained"; reason: string; by: string; at: string }
 export interface Gates { documents: boolean; accounts: boolean; handedOver: boolean; dms: boolean }
 export interface StockCheck { id: string; at: string; by: string; results: Record<string, "found" | "not found" | "unchecked"> }
+
+/* Yard layer: decisions people take on top of the canonical yard fixtures (yardData.ts). */
+export interface YardState {
+  /** Accounts holds released by Caroline (vehicle keys). */
+  released: string[];
+  /** Waiting-approval vehicles whose customer approved the extra work. */
+  approved: string[];
+  /** Comms inbox decisions: confirmed to a vehicle, or dismissed (key null). */
+  commsResolved: Record<string, { key: string | null; by: string; at: string }>;
+  /** ANPR unknowns the team matched to a known vehicle or created. */
+  anpr: Record<string, { kind: "matched" | "created"; key: string; customer?: string; model?: string }>;
+  /** Inspection notices: stage moved by an approved message or a booking. */
+  notices: Record<string, { stage: NoticeStage; sentAt?: string; message?: string; bookedFor?: string; reply?: string; repliedAt?: string }>;
+  overnightSummary: string | null;
+  /** Visible two-way sync log between Pulse and Keyloop (demo representation). */
+  keyloopLog: { at: string; dir: "Pulse to Keyloop" | "Keyloop to Pulse"; text: string }[];
+  /** Customer updates sent from Pulse (key to text), shown on the vehicle page. */
+  customerUpdates: Record<string, { at: string; text: string }>;
+}
 
 export interface State {
   clock: number;
@@ -60,6 +80,7 @@ export interface State {
   drawer: { kind: "vehicle" | "job" | "company" | "quote"; id: string } | null;
   toast: string | null;
   focus: Record<string, string>;
+  yard: YardState;
 }
 
 /* ---- initial state ---------------------------------------------------------- */
@@ -130,7 +151,14 @@ function initial(): State {
     corrections: [],
     drawer: null,
     toast: null,
-    focus: { quote: "Q-1042", specVehicle: "V024" },
+    focus: { quote: "Q-1042", specVehicle: "V024", vehicle: "C101" },
+    yard: {
+      released: [], approved: [], commsResolved: {}, anpr: {}, notices: {}, overnightSummary: null, customerUpdates: {},
+      keyloopLog: [
+        { at: "09:58", dir: "Keyloop to Pulse", text: "JOB-1084 created for 241-D-1821 (Kelly Logistics) is available in Pulse" },
+        { at: "09:41", dir: "Pulse to Keyloop", text: "JOB-1046 awaiting-parts flag written back with PO-8817" },
+      ],
+    },
   };
 }
 
@@ -350,7 +378,7 @@ export function approvals(s: State, d: Derived): ApprovalItem[] {
   });
   s.stock.filter(v => v.reviewFlag && !s.decisions["sc-" + v.id]).forEach(v => out.push({ id: "sc-" + v.id, queue: "Stock correction", title: `${v.id} — missing from latest order book`, reviewer: "p-anthony", record: v.id,
     evidence: [`Absent from ${ORDER_BOOK_NEXT.file}`, v.promisedTo ? `Promised to ${cname(v.promisedTo)}` : "No customer promise"], consequence: "Keeps the vehicle tracked as incoming with a review history entry. A missing row never becomes a sale." }));
-  if (!s.decisions["cc-V008"]) out.push({ id: "cc-V008", queue: "Customer communication", title: "V008 — draft update to Midlands Parcel Services", reviewer: "p-anthony", record: "V008",
+  if (!s.decisions["cc-V008"]) out.push({ id: "cc-V008", queue: "Customer communication", title: `V008 (${vehicleLabel(s, "V008").reg}): draft update to ${cname(s.stock.find(v => v.id === "V008")?.customer)}`, reviewer: "p-anthony", record: "V008",
     evidence: ["Prepared by Handover Coordinator", "No release date promised; no internal costs"], consequence: "Approving marks the draft ready. It is not sent from the demo." });
   return out;
 }
@@ -560,8 +588,10 @@ export const A = {
   /* Handover + CVRT */
   receivePart: (jobId: string) => update(d => {
     const j = d.jobs.find(x => x.id === jobId)!; if (!j.partBlocker) return;
-    j.partBlocker.received = true; j.status = "queued"; j.plannedStart = "11:30";
-    log(d, "Darren O'Brien", "person", `Received ${j.partBlocker.part} for ${jobId} — repair rescheduled 11:30`, jobId);
+    j.partBlocker.received = true;
+    if (j.status === "awaiting_parts") { j.status = "queued"; j.plannedStart = "11:30"; }
+    log(d, "Darren O'Brien", "person", `Received ${j.partBlocker.part} for ${jobId}${j.status === "queued" ? " — repair rescheduled 11:30" : ""}`, jobId);
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Pulse to Keyloop", text: `${jobId} part received (${j.partBlocker.po ?? "PO"}); job status updated` });
   }, "Part received — repair can resume. Test result unchanged."),
   completeRepair: (jobId: string) => update(d => {
     const j = d.jobs.find(x => x.id === jobId)!; j.status = "awaiting_qc"; j.stoppedElapsed = j.budgetMin; j.plannedStart = undefined;
@@ -624,6 +654,66 @@ export const A = {
   }, "Sample run recorded locally — nothing sent externally"),
   approveRun: (id: string) => update(d => { const r = d.runs.find(x => x.id === id)!; r.status = "Approved locally"; log(d, ME, "person", `Approved run ${id} locally`); }, "Approved locally"),
   setRule: (k: keyof State["rules"], v: number | boolean) => update(d => { (d.rules as Record<string, number | boolean>)[k] = v; }),
+
+  /* Yard layer */
+  releaseHold: (key: string, who = "Caroline Glynn") => update(d => {
+    if (!d.yard.released.includes(key)) d.yard.released.push(key);
+    log(d, who, "person", `Accounts approval recorded for ${key}: release cleared (demo review, no payment moved)`, key, true);
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Pulse to Keyloop", text: `Release clearance for ${key} written to the customer account note` });
+  }, "Release cleared by accounts. Nothing is posted to Keyloop in this demo"),
+  reinstateHold: (key: string) => update(d => { d.yard.released = d.yard.released.filter(k => k !== key); log(d, "Caroline Glynn", "person", `Accounts hold reinstated on ${key}`, key); }),
+  approveExtra: (key: string, who: string) => update(d => {
+    if (!d.yard.approved.includes(key)) d.yard.approved.push(key);
+    log(d, who, "person", `Customer approval of extra work recorded for ${key}`, key);
+  }, "Approval recorded. The job moves back to the workshop"),
+  resolveComm: (id: string, key: string | null) => update(d => {
+    d.yard.commsResolved[id] = { key, by: "Anthony Reynolds", at: now(d) };
+    log(d, ME, "person", key ? `Confirmed message ${id} belongs to ${key}` : `Dismissed message ${id} as not operational`, key ?? id);
+  }, key ? "Matched. The message is now on the vehicle timeline and job" : "Dismissed"),
+  anprMatch: (eventId: string, key: string) => update(d => {
+    d.yard.anpr[eventId] = { kind: "matched", key };
+    log(d, ME, "person", `Matched ANPR read ${eventId} to ${key}`, key, true);
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Keyloop to Pulse", text: `Vehicle ${key} record attached to ANPR read ${eventId}` });
+  }, "Vehicle matched and added to the yard"),
+  anprCreate: (eventId: string, o: { customer: string; model: string }) => update(d => {
+    d.yard.anpr[eventId] = { kind: "created", key: eventId, customer: o.customer, model: o.model };
+    log(d, ME, "person", `Created a new vehicle from ANPR read ${eventId} for ${cname(o.customer)}`, eventId, true);
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Pulse to Keyloop", text: `New vehicle record requested in Keyloop for read ${eventId}` });
+  }, "Vehicle created. A Keyloop record is requested on the next sync"),
+  noticeSend: (id: string, message: string) => update(d => {
+    d.yard.notices[id] = { stage: "contacted", sentAt: now(d), message };
+    log(d, "Inspection Coordinator", "agent", `Reminder for notice ${id} approved by Anthony Reynolds and sent (simulated)`, id);
+  }, "Approved. Reminder sent (simulated, nothing leaves the demo)"),
+  /** Customer opened the reminder; now waiting on them (simulated). */
+  noticeAwait: (id: string) => update(d => {
+    d.yard.notices[id] = { ...d.yard.notices[id], stage: "awaiting" };
+  }),
+  /** Customer reply arrives (simulated). */
+  noticeReply: (id: string, reply: string) => update(d => {
+    d.yard.notices[id] = { ...d.yard.notices[id], stage: "awaiting", reply, repliedAt: now(d) };
+    log(d, "Inspection Coordinator", "agent", `Customer reply received for notice ${id}: "${reply}"`, id);
+  }, "Customer replied (simulated)"),
+  noticeBook: (id: string, when: string) => update(d => {
+    const cur = d.yard.notices[id];
+    d.yard.notices[id] = { ...cur, stage: "booked", bookedFor: when };
+    const label = /^\d{4}-\d{2}-\d{2}T/.test(when) ? new Date(when).toLocaleString("en-IE", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }) : when;
+    log(d, "Inspection Coordinator", "agent", `Inspection for notice ${id} booked ${label}`, id);
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Pulse to Keyloop", text: `Workshop booking created for notice ${id} (${label})` });
+  }, "Booked into the workshop planner"),
+  customerUpdate: (key: string, text: string) => update(d => {
+    d.yard.customerUpdates[key] = { at: now(d), text };
+    log(d, ME, "person", `Customer update drafted and approved for ${key} (simulated send)`, key);
+  }, "Customer update sent (simulated)"),
+  overnightSummary: (text: string) => update(d => { d.yard.overnightSummary = text; log(d, "Yard Monitor", "agent", "Generated the overnight management summary", "yard"); }, "Management summary generated"),
+  keyloopSync: () => update(d => {
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Keyloop to Pulse", text: "Manual sync: 0 conflicts, 12 records refreshed" });
+  }, "Keyloop sync complete (demo)"),
+  setJobStatus: (jobId: string, status: Job["status"]) => update(d => {
+    const j = d.jobs.find(x => x.id === jobId); if (!j) return;
+    const from = j.status; j.status = status;
+    d.yard.keyloopLog.unshift({ at: now(d), dir: "Pulse to Keyloop", text: `${jobId} status ${from.replace("_", " ")} to ${status.replace("_", " ")} written to Keyloop` });
+    log(d, ME, "person", `Changed ${jobId} status to ${status.replace("_", " ")} (written back to Keyloop)`, jobId);
+  }, "Status changed in Pulse and written back to Keyloop"),
 };
 
 function defaultCard(jobId: string): JobCard {

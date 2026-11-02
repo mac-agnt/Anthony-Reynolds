@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import "../styles/shell-mobile.css";
 import { arr, cat, css, cx, txt } from "../runtime/template";
 import AgentFace from "../components/AgentFace";
 import NavThumb from "../components/NavThumb";
@@ -28,14 +29,15 @@ export default function AppShell({ v }: Props) {
       <div style={{"position":"absolute","width":"1px","height":"1px","overflow":"hidden","opacity":"0","pointerEvents":"none"}}>
         <AgentFace shape={"crown-pebble"} state={"idle"} tint={"#191c1f"} size={"1"} />
       </div>
-      <nav data-rail-nav="1" style={css(v.railOuter)}>
+      <div data-shell-scrim="1" data-open={v.railOpen ? "1" : "0"} onClick={v.toggleRail} />
+      <nav data-rail-nav="1" data-shell-rail="1" data-open={v.railOpen ? "1" : "0"} style={css(v.railOuter)}>
         <span style={css(v.railThumbStyle)} />
         <div style={css(cat(v.railRowStyle, "margin-bottom:22px"))}>
           <button className={cx("ix0", "ix1")} onClick={v.toggleRail} title={v.railLabel} style={{"width":"36px","height":"36px","flex":"none","border":"0","borderRadius":"var(--cta-r,11px)","background":"var(--accent-fill,var(--accent))","color":"var(--on-accent)","boxShadow":"var(--accent-glow,none)","cursor":"pointer","display":"flex","alignItems":"center","justifyContent":"center","fontSize":"12px","fontWeight":"700","letterSpacing":"-.5px","padding":"0","transition":"transform .2s var(--ease)"}}>
             {"RC"}
           </button>
           <span style={css(v.brandStyle)}>
-            <span style={{"display":"block","fontSize":"15px","fontWeight":"600","letterSpacing":"-.3px","color":"var(--ink)"}}>
+            <span style={{"display":"block","fontSize":"13px","fontWeight":"600","letterSpacing":"-.2px","color":"var(--ink)","whiteSpace":"nowrap"}}>
               {"Reynolds Commercials"}
             </span>
             <span style={{"display":"block","marginTop":"2px","fontSize":"9px","fontWeight":"500","letterSpacing":".16em","color":"var(--accent)"}}>
@@ -165,7 +167,7 @@ export default function AppShell({ v }: Props) {
           {txt(v.hoverLabel?.hint)}
         </span>
       </span>
-      <main style={css(cat("--page-dy:", v.pageDy, ";position:relative;z-index:1;flex:1;min-width:0;display:flex;flex-direction:column;margin:16px 16px 16px 0;background:var(--panel,#0f1316);border:1px solid var(--border);border-radius:28px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.03) inset"))}>
+      <main data-shell-main="1" style={css(cat("--page-dy:", v.pageDy, ";position:relative;z-index:1;flex:1;min-width:0;display:flex;flex-direction:column;margin:16px 16px 16px 0;background:var(--panel,#0f1316);border:1px solid var(--border);border-radius:28px;overflow:hidden;box-shadow:0 1px 0 rgba(255,255,255,.03) inset"))}>
         {"\n"}
         {txt(v.pageSweepEl)}
         {"\n"}
@@ -176,8 +178,11 @@ export default function AppShell({ v }: Props) {
         )}
         <div style={{"position":"absolute","left":"0","right":"0","bottom":"0","height":"64px","zIndex":"3","pointerEvents":"none","maskImage":"linear-gradient(0deg,#000 0%,transparent 100%)","WebkitMaskImage":"linear-gradient(0deg,#000 0%,transparent 100%)","background":"linear-gradient(0deg,var(--bg) 0%,rgba(0,0,0,0) 100%)","opacity":".85"}} />
         <div style={css(v.headerFieldStyle)} />
-        <header style={{"position":"relative","zIndex":"4","flex":"none","width":"100%","padding":"18px 28px","boxSizing":"border-box","borderBottom":"1px solid var(--border)"}}>
-          <div style={css(v.headerPillStyle)}>
+        <header data-shell-header="1" style={{"position":"relative","zIndex":"4","flex":"none","width":"100%","padding":"18px 28px","boxSizing":"border-box","borderBottom":"1px solid var(--border)"}}>
+          <button data-shell-burger="1" onClick={v.toggleRail} aria-label="Open menu" style={{"width":"44px","height":"44px","flex":"none","border":"1px solid var(--border)","borderRadius":"999px","background":"var(--surface)","color":"var(--ink)","cursor":"pointer","alignItems":"center","justifyContent":"center"}}>
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"><path d="M4 7h16 M4 12h16 M4 17h16" /></svg>
+          </button>
+          <div data-shell-pill="1" style={css(v.headerPillStyle)}>
             {v.isAgents && (
               <>
                 <div style={{"flex":"0 0 auto","display":"flex","alignItems":"center","gap":"9px","padding":"0 8px 0 5px"}}>

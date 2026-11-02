@@ -1,0 +1,38 @@
+/* Finance: operational financial visibility. Tokens only, so light and dark both work. */
+.f-release{border:1px solid var(--bad);background:var(--bad-soft);border-radius:18px;padding:16px 18px;margin-bottom:16px}
+.f-release.clear{border-color:var(--border);background:var(--surface)}
+.f-rhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.f-stamp{font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.14em;color:var(--bad)}
+.f-stamp.ok{color:var(--ok)}
+.f-hrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px 20px;align-items:center;padding:14px 0;border-top:1px solid var(--border-strong)}
+.f-hrow:first-of-type{border-top:0}
+.f-hid{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:14px}
+.f-hid .d-link{font-weight:600}
+.f-reason{margin:8px 0 6px;font-size:14px;font-weight:600;line-height:1.45;color:var(--ink)}
+.f-reason span{display:block}
+.f-reason .red{color:var(--bad);font-family:var(--mono);font-size:11px;letter-spacing:.12em}
+.f-meta{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:12px;color:var(--dim)}
+.f-meta b{color:var(--ink);font-weight:500}
+.f-claim{margin-top:8px;font-size:12px;color:var(--body);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 10px}
+.f-act{display:flex;flex-direction:column;gap:6px;align-items:stretch}
+@media (max-width:720px){.f-hrow{grid-template-columns:1fr}.f-act{flex-direction:row;flex-wrap:wrap}}
+.f-tiles{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:16px}
+@media (max-width:1100px){.f-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:480px){.f-tiles{grid-template-columns:1fr}}
+.f-tile{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:13px 15px;min-width:0;text-align:left;color:inherit;font:inherit;display:block;width:100%}
+button.f-tile{cursor:pointer}
+button.f-tile:hover{border-color:var(--border-strong)}
+.f-tile.bad{border-color:var(--bad)}
+.f-tile.warn{border-color:var(--warn)}
+.f-tile .v{font-size:24px;font-weight:600;letter-spacing:-.6px;margin-top:4px;font-variant-numeric:tabular-nums}
+.f-tile .h{color:var(--dim);font-size:11.5px;margin-top:2px}
+.f-tile .sample{display:inline-block;margin-left:6px;font-family:var(--mono);font-size:8.5px;letter-spacing:.12em;color:var(--faint);border:1px solid var(--border);border-radius:5px;padding:1px 4px}
+.f-exc{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
+.f-exc:last-child{border-bottom:0}
+@media (max-width:720px){.f-exc{grid-template-columns:1fr}}
+.f-sec{font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:2px 0 8px}
+.f-rhead .d-grow{flex:1 1 220px}
+.f-hid{min-width:0}
+.f-claim{overflow-wrap:anywhere}
+/* Narrow screens: let the page title take its own line so the sub-text is not squeezed beside the actions. */
+@media (max-width:720px){.d-head>.d-grow{flex:1 1 100%}}
